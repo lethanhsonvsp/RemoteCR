@@ -46,8 +46,8 @@ namespace RemoteCR
                             Left = (d2 & 0b0100_0000) != 0,
                             Right = (d2 & 0b1000_0000) != 0,
 
-                            ModeSelect = d1 == 0x40,
-                            Enable = d1 == 0x80,   // hoặc tùy bạn map theo d2 nibble
+                            ModeSelect = (d1 & 0b0100_0000) != 0, // ModeSelect = d1 == 0x40,
+                            Enable = (d1 & 0b1000_0000) != 0,  
                             Speed = d3 <= 100 ? d3 : 0,
                             Mode = DecodeMode(d2)
 
@@ -68,13 +68,18 @@ namespace RemoteCR
                 await Task.Delay(200, stoppingToken);
             }
         }
-        private string DecodeMode(byte d2) => d2 switch
+        private string DecodeMode(byte d2)
         {
-            0x00 => "Default",
-            0x01 => "Maintenance",
-            0x02 => "Override",
-            _ => "Unknown"
-        };
+            byte low = (byte)(d2 & 0x0F); // chỉ lấy 4 bit thấp
+            return low switch
+            {
+                0x00 => "Default",
+                0x01 => "Maintenance",
+                0x02 => "Override",
+                _ => "Unknown"
+            };
+        }
+
         private string BuildActionString(DeviceState s)
         {
             if (s.LiftUp) return "Lift Up";
