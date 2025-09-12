@@ -13,39 +13,51 @@ namespace RemoteCR
 
         public ModbusBackgroundService()
         {
-            _mb = new ModbusRtuClient("COM4"); // ⚠️ chỉnh COM
+            _mb = new ModbusRtuClient("COM4"); // ⚠ chỉnh COM port
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            (byte oldD0, byte oldD1, byte oldD2, byte oldD3, byte oldD4) = (0, 0, 0, 0, 0);
+            (byte oldD0, byte oldD1, byte oldD2, byte oldD3) = (0, 0, 0, 0);
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    var regs = _mb.ReadHoldingRegisters(_slave, 0x0001, 3); // đọc 3 word
+                    var regs = _mb.ReadHoldingRegisters(_slave, 0x0001, 3);
                     var (d0, d1, d2, d3) = ProtocolHelpers.ToBytes(regs);
-                    byte d4 = (byte)(regs[2] >> 8);
 
-                    Console.WriteLine($"Data: {d0:X2} {d1:X2} {d2:X2} {d3:X2} {d4:X2}");
-
-                    if (d0 != oldD0 || d1 != oldD1 || d2 != oldD2 || d3 != oldD3 || d4 != oldD4)
+                    if (d0 != oldD0 || d1 != oldD1 || d2 != oldD2 || d3 != oldD3)
                     {
-                        string action = ParseAction(d1, d2, d3);
-
                         var state = new DeviceState
                         {
-                            Heartbeat = ProtocolHelpers.Bit(d0, 7),
-                            LostLink = ProtocolHelpers.Bit(d0, 2),
-                            Locked = ProtocolHelpers.Bit(d0, 1),
-                            EStop = ProtocolHelpers.Bit(d0, 0),
-                            Action = action
+                            Heartbeat = (d0 & 0b1000_0000) != 0,
+                            LostLink = (d0 & 0b0000_0100) != 0,
+                            Locked = (d0 & 0b0000_0010) != 0,
+                            EStop = (d0 & 0b0000_0001) != 0,
+
+                            LiftUp = (d1 & 0b0000_0001) != 0,
+                            LiftDown = (d1 & 0b0000_0010) != 0,
+                            RotateLeft = (d1 & 0b0000_0100) != 0,
+                            RotateRight = (d1 & 0b0000_1000) != 0,
+
+                            Forward = (d2 & 0b0001_0000) != 0,
+                            Backward = (d2 & 0b0010_0000) != 0,
+                            Left = (d2 & 0b0100_0000) != 0,
+                            Right = (d2 & 0b1000_0000) != 0,
+
+                            ModeSelect = d1 == 0x40,
+                            Enable = d1 == 0x80,   // hoặc tùy bạn map theo d2 nibble
+                            Speed = d3 <= 100 ? d3 : 0,
+                            Mode = DecodeMode(d2)
+
                         };
 
-                        OnStateChanged?.Invoke(state);
+                        // Tạo chuỗi Action để debug/log
+                        state.Action = BuildActionString(state);
 
-                        (oldD0, oldD1, oldD2, oldD3, oldD4) = (d0, d1, d2, d3, d4);
+                        OnStateChanged?.Invoke(state);
+                        (oldD0, oldD1, oldD2, oldD3) = (d0, d1, d2, d3);
                     }
                 }
                 catch (Exception ex)
@@ -56,85 +68,29 @@ namespace RemoteCR
                 await Task.Delay(200, stoppingToken);
             }
         }
-
-        private string ParseAction(byte d1, byte d2, byte d3)
+        private string DecodeMode(byte d2) => d2 switch
         {
-            string code = $"{d1:X2}{d2:X2}{d3:X2}";
-            string Mode(byte m) => m switch
-            {
-                0x00 => "Default",
-                0x01 => "Maintenance",
-                0x02 => "Override",
-                _ => "Unknown" // Replace null with a default value
-            };
-
-            var d1Actions = new Dictionary<byte, string>
-            {
-                [0x01] = "Lift Up",
-                [0x02] = "Lift Down",
-                [0x04] = "Rotate Left",
-                [0x08] = "Rotate Right"
-            };
-
-            var d2Moves = new Dictionary<byte, string>
-            {
-                [0x10] = "Forward",
-                [0x20] = "Backward",
-                [0x40] = "Left",
-                [0x80] = "Right"
-            };
-
-            // --- Trường hợp d3 == 0 (các nút bấm cơ bản) ---
-            if (d3 == 0x00)
-            {
-                if (d1 == 0x00 && Mode(d2) is string m0) return m0;
-                if (d1 == 0x40 && Mode(d2) is string m1) return $"Mode Select {m1}";
-                if (d1 == 0x80 && (d2 == 0x00 || d2 == 0x01 || d2 == 0x02)) return $"Enable {Mode(d2)}";
-
-                if (d1Actions.TryGetValue(d1, out var act) && Mode(d2) is string m2) return $"{act} {m2}";
-
-                if (d1 == 0x80)
-                {
-                    var high = (byte)(d2 & 0xF0);
-                    var low = (byte)(d2 & 0x0F);
-                    if (d2Moves.TryGetValue(high, out var mv) && Mode(low) is string m3) return $"{mv} {m3}";
-                }
-            }
-
-            // --- Speed analog ---
-            if (d1 == 0x00 && d3 <= 0x64 && Mode(d2) is string m4)
-                return $"Speed {m4} {d3}";
-
-            // --- Action + Speed (mở rộng) ---
-            if (d3 <= 0x64)
-            {
-                // Lift / Rotate
-                if (d1Actions.TryGetValue(d1, out var act) && Mode(d2) is string m5)
-                    return $"{act} {m5} + Speed {d3}";
-
-                // Mode Select
-                if (d1 == 0x40 && Mode(d2) is string m6)
-                    return $"Mode Select {m6} + Speed {d3}";
-
-                // Enable
-                if (d1 == 0x80 && (d2 == 0x00 || d2 == 0x01 || d2 == 0x02))
-                    return $"Enable {Mode(d2)} + Speed {d3}";
-
-                // Move
-                if (d1 == 0x80)
-                {
-                    var high = (byte)(d2 & 0xF0);
-                    var low = (byte)(d2 & 0x0F);
-                    if (d2Moves.TryGetValue(high, out var mv) && Mode(low) is string m7)
-                        return $"{mv} {m7} + Speed {d3}";
-                }
-            }
-
-            return $"Other ({code})";
+            0x00 => "Default",
+            0x01 => "Maintenance",
+            0x02 => "Override",
+            _ => "Unknown"
+        };
+        private string BuildActionString(DeviceState s)
+        {
+            if (s.LiftUp) return "Lift Up";
+            if (s.LiftDown) return "Lift Down";
+            if (s.RotateLeft) return "Rotate Left";
+            if (s.RotateRight) return "Rotate Right";
+            if (s.Forward) return "Forward";
+            if (s.Backward) return "Backward";
+            if (s.Left) return "Left";
+            if (s.Right) return "Right";
+            if (s.ModeSelect) return "Mode Select";
+            if (s.Enable) return "Enable";
+            if (s.Speed > 0) return $"Speed {s.Speed}";
+            return "None";
         }
-
     }
-
     public class DeviceState
     {
         public bool Heartbeat { get; set; }
@@ -142,5 +98,21 @@ namespace RemoteCR
         public bool Locked { get; set; }
         public bool EStop { get; set; }
         public string Action { get; set; } = "None";
+
+        // Binary mapping
+        public bool LiftUp { get; set; }
+        public bool LiftDown { get; set; }
+        public bool RotateLeft { get; set; }
+        public bool RotateRight { get; set; }
+        public bool Forward { get; set; }
+        public bool Backward { get; set; }
+        public bool Left { get; set; }
+        public bool Right { get; set; }
+        public bool ModeSelect { get; set; }
+        public bool Enable { get; set; }
+
+        public int Speed { get; set; }
+        public string Mode { get; set; } = "Unknown";
+
     }
 }
