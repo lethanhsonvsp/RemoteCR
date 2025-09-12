@@ -1,0 +1,214 @@
+﻿@page "/counter"
+@rendermode InteractiveServer
+@inject RemoteCR.ModbusBackgroundService ModbusService
+
+<h3 class="mb-4 fw-bold text-dark">📡 Trạng thái thiết bị RS-485</h3>
+
+@if (state is null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <i class="bi bi-hourglass-split"></i> Đang chờ dữ liệu...
+    </div>
+}
+else
+{
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body p-4">
+
+            <!-- Trạng thái cơ bản -->
+            <div class="row mb-4">
+                <div class="col-6 d-flex align-items-center gap-2">
+                    <b>Heartbeat:</b>
+                    <span class="badge @(state.Heartbeat ? "bg-success" : "bg-secondary") rounded-pill">
+                        @(state.Heartbeat ? "ON" : "OFF")
+                    </span>
+                </div>
+                <div class="col-6 d-flex align-items-center gap-2">
+                    <b>Locked:</b>
+                    <span class="badge @(state.Locked ? "bg-danger" : "bg-success") rounded-pill">
+                        @(state.Locked ? "YES" : "NO")
+                    </span>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                @if (state.LostLink)
+                {
+                    <div class="alert alert-danger d-flex align-items-center gap-2 p-3 rounded-3">
+                        <i class="bi bi-exclamation-triangle-fill"></i> MẤT KẾT NỐI TAY CẦM
+                    </div>
+                }
+                else
+                {
+                    <b>LostLink:</b>
+                    <span class="badge bg-success rounded-pill">NO</span>
+                }
+            </div>
+
+            <div class="mb-4">
+                <b>EStop:</b>
+                <span class="badge @(state.EStop ? "bg-danger" : "bg-success") rounded-pill">
+                    @(state.EStop ? "YES" : "NO")
+                </span>
+            </div>
+
+            <!-- Action hiện tại -->
+            <div class="mb-4">
+                <b>Action:</b>
+                <span class="text-muted">@state.Action</span>
+            </div>
+
+            <!-- Icons cho Lift, Rotate, Mode Select, Enable -->
+            <div class="d-flex flex-wrap gap-3 mb-4">
+                @RenderIcon("Lift Up", "bi-arrow-up-circle")
+                @RenderIcon("Lift Down", "bi-arrow-down-circle")
+                @RenderIcon("Rotate Left", "bi-arrow-counterclockwise")
+                @RenderIcon("Rotate Right", "bi-arrow-clockwise")
+                @RenderIcon("Mode Select", "bi-gear")
+                @RenderIcon("Enable", "bi-unlock")
+            </div>
+
+            <div class="move-annulus mx-auto mb-4 text-center">
+                <svg viewBox="0 0 200 200" width="220" height="220">
+                    <!-- Forward (top) -->
+                    <path d="M100,20
+                     A80,80 0 0,1 180,100
+                     L140,100
+                     A40,40 0 0,0 100,60
+                     Z"
+                          class="@(IsActive("Forward") ? "active" : "inactive")" />
+
+                    <!-- Right -->
+                    <path d="M180,100
+                     A80,80 0 0,1 100,180
+                     L100,140
+                     A40,40 0 0,0 140,100
+                     Z"
+                          class="@(IsActive("Right") ? "active" : "inactive")" />
+
+                    <!-- Backward (bottom) -->
+                    <path d="M100,180
+                     A80,80 0 0,1 20,100
+                     L60,100
+                     A40,40 0 0,0 100,140
+                     Z"
+                          class="@(IsActive("Backward") ? "active" : "inactive")" />
+
+                    <!-- Left -->
+                    <path d="M20,100
+                     A80,80 0 0,1 100,20
+                     L100,60
+                     A40,40 0 0,0 60,100
+                     Z"
+                          class="@(IsActive("Left") ? "active" : "inactive")" />
+
+                    <!-- Labels -->
+                    <text x="100" y="35" text-anchor="middle"
+                          class="@(IsActive("Forward") ? "label-active" : "label-inactive")">FWD</text>
+                    <text x="165" y="105" text-anchor="middle"
+                          class="@(IsActive("Right") ? "label-active" : "label-inactive")">RIGHT</text>
+                    <text x="100" y="170" text-anchor="middle"
+                          class="@(IsActive("Backward") ? "label-active" : "label-inactive")">BACK</text>
+                    <text x="35" y="105" text-anchor="middle"
+                          class="@(IsActive("Left") ? "label-active" : "label-inactive")">LEFT</text>
+                </svg>
+            </div>
+
+            <!-- Thanh tốc độ -->
+            @if (state.Action.Contains("Speed"))
+            {
+                int val = 0;
+                foreach (var p in state.Action.Split(' '))
+                {
+                    if (int.TryParse(p, out var parsed))
+                    {
+                        val = parsed;
+                        break;
+                    }
+                }
+                <label class="form-label fw-semibold"><b>Tốc độ</b> (@val%)</label>
+                <div class="progress rounded-3" style="height: 24px;">
+                    <div class="progress-bar bg-info progress-bar-striped progress-bar-animated"
+                         role="progressbar"
+                         style="width:@val%; transition: width 0.3s ease-in-out;"
+                         aria-valuenow="@val"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        @val%
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .icon-action {
+        font-size: 1.75rem;
+        transition: transform 0.2s ease, color 0.2s ease;
+    }
+
+        .icon-action:hover {
+            transform: scale(1.2);
+            color: #0d6efd !important;
+        }
+
+    .move-annulus path {
+        stroke: #6c757d;
+        stroke-width: 2;
+        fill: #e9ecef;
+        transition: fill 0.3s ease;
+    }
+
+        .move-annulus path.active {
+            fill: #0d6efd;
+        }
+
+    .move-annulus text {
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    .label-active {
+        fill: #0d6efd;
+    }
+
+    .label-inactive {
+        fill: #6c757d;
+    }
+
+    .badge {
+        padding: 0.5em 1em;
+        font-size: 0.9rem;
+    }
+
+    .progress-bar {
+        background-image: linear-gradient( 45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent );
+        background-size: 1rem 1rem;
+    }
+</style>
+
+@code {
+    private RemoteCR.DeviceState? state;
+
+    protected override void OnInitialized()
+    {
+        ModbusService.OnStateChanged += s =>
+        {
+            state = s;
+            InvokeAsync(StateHasChanged);
+        };
+    }
+
+    private bool IsActive(string keyword) =>
+        state?.Action.Contains(keyword) == true;
+
+    private RenderFragment RenderIcon(string keyword, string iconClass) => builder =>
+    {
+        bool active = state?.Action.Contains(keyword) == true;
+        string color = active ? "text-primary" : "text-secondary";
+        builder.OpenElement(0, "i");
+        builder.AddAttribute(1, "class", $"bi {iconClass} icon-action {color}");
+        builder.CloseElement();
+    };
+}
