@@ -1,6 +1,6 @@
-﻿@page "/counter"
+﻿@* @page "/counter"
 @rendermode InteractiveServer
-@inject RemoteCR.ModbusBackgroundService ModbusService
+@inject RemoteCR.ModbusBackgroundService ModbusService 
 
 <h3 class="mb-4 fw-bold text-dark">📡 Trạng thái thiết bị RS-485</h3>
 
@@ -150,3 +150,4 @@ else
                state.ModeSelect || state.Enable;
     }
 }
+ *@

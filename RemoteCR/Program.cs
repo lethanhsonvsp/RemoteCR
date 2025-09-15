@@ -1,4 +1,4 @@
-using RemoteCR;
+﻿using RemoteCR;
 using RemoteCR.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,7 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddSingleton<ModbusBackgroundService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
+//builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
+builder.Services.AddSingleton(new BmuService());
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
