@@ -1,7 +1,8 @@
 ﻿@page "/"
 @inject RemoteCR.BmuService BmuService
+<h1>ĐANG TEST PIN KHÔNG ĐỘNG VÀO </h1>
 
-<h3>BMU Monitor</h3>
+<h3>🔋 BMU Monitor</h3>
 
 @if (data == null || data.Count == 0)
 {
@@ -30,6 +31,54 @@ else
     </table>
 }
 
+<h4 class="mt-4">📊 Thống kê</h4>
+<table class="table table-bordered table-sm">
+    <tbody>
+        <tr>
+            <td>Thời gian bắt đầu</td>
+            <td>@BmuService.StartTime</td>
+        </tr>
+        <tr>
+            <td>Thời gian chạy (uptime)</td>
+            <td>@BmuService.Uptime.ToString(@"hh\:mm\:ss")</td>
+        </tr>
+        <tr>
+            <td>Số lần OK</td>
+            <td>@BmuService.SuccessCount</td>
+        </tr>
+        <tr>
+            <td>Số lần lỗi</td>
+            <td>@BmuService.ErrorCount</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4 class="mt-4">❌ Thống kê lỗi</h4>
+@if (BmuService.ErrorStats.Count == 0)
+{
+    <p>Không có lỗi.</p>
+}
+else
+{
+    <table class="table table-bordered table-sm">
+        <thead class="table-light">
+            <tr>
+                <th>Loại lỗi</th>
+                <th>Số lần</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var kv in BmuService.ErrorStats)
+            {
+                <tr>
+                    <td>@kv.Key</td>
+                    <td>@kv.Value</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
 @code {
     private Dictionary<string, double> data;
     private System.Threading.Timer timer;
@@ -50,6 +99,7 @@ else
 
     protected override void OnInitialized()
     {
+        // Timer UI làm mới mỗi 500ms
         timer = new System.Threading.Timer(_ =>
         {
             data = BmuService.LastData;

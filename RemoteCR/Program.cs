@@ -9,6 +9,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton<ModbusBackgroundService>();
 //builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
 builder.Services.AddSingleton(new BmuService());
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -28,5 +29,6 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+app.MapHub<BmuHub>("/bmuHub"); // hub cho BMU
 
 app.Run();
