@@ -3,7 +3,7 @@
 public class BmuService : IDisposable
 {
     private readonly BmuRs485Client _client;
-    private Timer _timer;
+    private readonly Timer _timer;
     private bool _inLoop = false;
 
     public DateTime StartTime { get; private set; }
@@ -11,20 +11,21 @@ public class BmuService : IDisposable
     public int ErrorCount { get; private set; } = 0;
 
     public Dictionary<string, double> LastData { get; private set; }
-    public List<string> LastAlarms { get; private set; } = new();
+    public List<string> LastAlarms { get; private set; } = [];
     public const string portName = "COM4";
 
     // 👇 thống kê lỗi theo loại
-    public Dictionary<string, int> ErrorStats { get; private set; } = new();
+    public Dictionary<string, int> ErrorStats { get; private set; } = [];
 
     public BmuService()
     {
         _client = new BmuRs485Client(portName);
         StartTime = DateTime.Now;
         _timer = new Timer(Loop, null, 0, 500);
+        LastData = [];
     }
 
-    private void Loop(object state)
+    private void Loop(object? state)
     {
         if (_inLoop) return;
         _inLoop = true;
@@ -41,8 +42,8 @@ public class BmuService : IDisposable
             {
                 SuccessCount++;
                 LastData = data;
-                if (data.ContainsKey("Status"))
-                    LastAlarms = DecodeStatus((int)data["Status"]);
+                if (data.TryGetValue("Status", out double value))
+                    LastAlarms = DecodeStatus((int)value);
             }
             else
             {
@@ -73,7 +74,7 @@ public class BmuService : IDisposable
         ErrorStats[type]++;
     }
 
-    private List<string> DecodeStatus(int status)
+    private static List<string> DecodeStatus(int status)
     {
         var alarms = new List<string>();
         if ((status & 1 << 0) != 0) alarms.Add("Battery Over Voltage");
@@ -92,5 +93,6 @@ public class BmuService : IDisposable
     {
         _timer?.Dispose();
         _client?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
