@@ -37,7 +37,7 @@ public class BmuRs485Client : IDisposable
     private readonly int _readTimeoutMs;
     private readonly int _writeTimeoutMs;
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private bool _faulted = false;
     private DateTime _lastRetry = DateTime.MinValue;
     private int _retryDelayMs = 1000; // backoff min = 1s
@@ -143,8 +143,8 @@ public class BmuRs485Client : IDisposable
             byte kind1Byte = (byte)kind1;
             byte kind2Byte = (byte)kind2;
 
-            byte[] frame = new byte[]
-            {
+            byte[] frame =
+            [
                 0xAF, 0xFA,
                 address,
                 0x05,
@@ -153,7 +153,7 @@ public class BmuRs485Client : IDisposable
                 kind1Byte, kind2Byte,
                 0x00,
                 0xAF, 0xA0
-            };
+            ];
 
             frame[8] = Checksum(frame, 2, 6);
             _port.DiscardInBuffer();
@@ -171,7 +171,7 @@ public class BmuRs485Client : IDisposable
     private byte[] ReadFrame()
     {
         EnsureConnected();
-        if (_port == null || !_port.IsOpen || _faulted) return Array.Empty<byte>();
+        if (_port == null || !_port.IsOpen || _faulted) return [];
 
         var buffer = new List<byte>();
         int expectedLen = -1;
@@ -208,11 +208,11 @@ public class BmuRs485Client : IDisposable
                         if (buffer[^2] == 0xAF && buffer[^1] == 0xA0)
                         {
                             if (buffer[0] == 0xAF && buffer[1] == 0xFA)
-                                Log($"[BMU] Full frame (AF FA): {ToHex(buffer.ToArray(), buffer.Count)}");
+                                Log($"[BMU] Full frame (AF FA): {ToHex([.. buffer], buffer.Count)}");
                             else if (buffer[0] == 0x4D)
-                                Log($"[BMU] Partial frame (4D): {ToHex(buffer.ToArray(), buffer.Count)}");
+                                Log($"[BMU] Partial frame (4D): {ToHex([.. buffer], buffer.Count)}");
 
-                            return buffer.ToArray();
+                            return [.. buffer];
                         }
                         else
                         {
@@ -230,14 +230,14 @@ public class BmuRs485Client : IDisposable
 
             // hết thời gian chờ
             if (buffer.Count > 0)
-                Log($"[BMU] Timeout / partial frame ({buffer.Count} bytes): {ToHex(buffer.ToArray(), buffer.Count)}");
-            return Array.Empty<byte>();
+                Log($"[BMU] Timeout / partial frame ({buffer.Count} bytes): {ToHex([.. buffer], buffer.Count)}");
+            return [];
         }
         catch (Exception ex)
         {
             Log($"[BMU] Read error: {ex.Message}");
             _faulted = true;
-            return Array.Empty<byte>();
+            return [];
         }
     }
 
