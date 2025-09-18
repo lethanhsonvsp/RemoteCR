@@ -1,6 +1,10 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+
 @inject RemoteCR.BmuService BmuService
-<h1>ĐANG TEST PIN KHÔNG ĐỘNG VÀO </h1>
+@implements IDisposable
+
+<h1>ĐANG TEST PIN KHÔNG ĐỘNG VÀO</h1>
 
 <h3>🔋 BMU Monitor</h3>
 
@@ -50,6 +54,30 @@ else
             <td>Số lần lỗi</td>
             <td>@BmuService.ErrorCount</td>
         </tr>
+        <tr>
+            <td>Số lần sạc</td>
+            <td>@BmuService.ChargeCount</td>
+        </tr>
+        <tr>
+            <td>Số lần xả</td>
+            <td>@BmuService.DischargeCount</td>
+        </tr>
+        <tr>
+            <td>Pin bật?</td>
+            <td>@(BmuService.BatteryEnabled ? "Bật" : "Tắt")</td>
+        </tr>
+        <tr>
+            <td>Đang sạc?</td>
+            <td>@(BmuService.IsCharging ? "Có" : "Không")</td>
+        </tr>
+        <tr>
+            <td>Lỗi COM gần nhất</td>
+            <td>@BmuService.LastComError</td>
+        </tr>
+        <tr>
+            <td>Frame mismatch</td>
+            <td>@BmuService.FrameMismatchCount</td>
+        </tr>
     </tbody>
 </table>
 
@@ -79,8 +107,10 @@ else
     </table>
 }
 
+<button class="btn btn-sm btn-primary" @onclick="TryReconnect">Kết nối lại</button>
+
 @code {
-    private Dictionary<string, double> data;
+    private Dictionary<string, double> data = new();
     private System.Threading.Timer timer;
 
     private readonly Dictionary<string, string> Meanings = new()
@@ -102,7 +132,7 @@ else
         // Timer UI làm mới mỗi 500ms
         timer = new System.Threading.Timer(_ =>
         {
-            data = BmuService.LastData;
+            data = BmuService.LastData ?? new Dictionary<string, double>();
             InvokeAsync(StateHasChanged);
         }, null, 0, 500);
     }
@@ -129,8 +159,15 @@ else
         return Meanings.ContainsKey(key) ? Meanings[key] : "-";
     }
 
+    private async Task TryReconnect()
+    {
+        await BmuService.TryReconnectAsync();
+    }
+
     public void Dispose()
     {
         timer?.Dispose();
     }
 }
+
+

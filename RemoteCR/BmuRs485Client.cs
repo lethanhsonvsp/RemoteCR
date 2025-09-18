@@ -26,7 +26,6 @@ public enum DataKind2 : byte
     RemainCapacity = 1 << 1,
     RemainEnergy = 1 << 2
 }
-
 public class BmuRs485Client : IDisposable
 {
     private SerialPort _port;
@@ -38,7 +37,7 @@ public class BmuRs485Client : IDisposable
     private readonly int _readTimeoutMs;
     private readonly int _writeTimeoutMs;
 
-    private readonly Lock _lock = new();
+    private readonly object _lock = new();
     private bool _faulted = false;
     private DateTime _lastRetry = DateTime.MinValue;
     private int _retryDelayMs = 1000; // backoff min = 1s
@@ -68,6 +67,7 @@ public class BmuRs485Client : IDisposable
         _port = null!;
         EnsureConnected();
     }
+
     private void CheckDataTimeout()
     {
         if (_lastDataTime != DateTime.MinValue &&
@@ -143,17 +143,17 @@ public class BmuRs485Client : IDisposable
             byte kind1Byte = (byte)kind1;
             byte kind2Byte = (byte)kind2;
 
-            byte[] frame =
-            [
-                    0xAF, 0xFA,
-                    address,
-                    0x05,
-                    0x01,
-                    address,
-                    kind1Byte, kind2Byte,
-                    0x00,
-                    0xAF, 0xA0
-            ];
+            byte[] frame = new byte[]
+            {
+                0xAF, 0xFA,
+                address,
+                0x05,
+                0x01,
+                address,
+                kind1Byte, kind2Byte,
+                0x00,
+                0xAF, 0xA0
+            };
 
             frame[8] = Checksum(frame, 2, 6);
             _port.DiscardInBuffer();
@@ -171,7 +171,7 @@ public class BmuRs485Client : IDisposable
     private byte[] ReadFrame()
     {
         EnsureConnected();
-        if (_port == null || !_port.IsOpen || _faulted) return [];
+        if (_port == null || !_port.IsOpen || _faulted) return Array.Empty<byte>();
 
         var buffer = new List<byte>();
         int expectedLen = -1;
@@ -208,11 +208,11 @@ public class BmuRs485Client : IDisposable
                         if (buffer[^2] == 0xAF && buffer[^1] == 0xA0)
                         {
                             if (buffer[0] == 0xAF && buffer[1] == 0xFA)
-                                Log($"[BMU] Full frame (AF FA): {ToHex([.. buffer], buffer.Count)}");
+                                Log($"[BMU] Full frame (AF FA): {ToHex(buffer.ToArray(), buffer.Count)}");
                             else if (buffer[0] == 0x4D)
-                                Log($"[BMU] Partial frame (4D): {ToHex([.. buffer], buffer.Count)}");
+                                Log($"[BMU] Partial frame (4D): {ToHex(buffer.ToArray(), buffer.Count)}");
 
-                            return [.. buffer];
+                            return buffer.ToArray();
                         }
                         else
                         {
@@ -230,18 +230,18 @@ public class BmuRs485Client : IDisposable
 
             // hết thời gian chờ
             if (buffer.Count > 0)
-                Log($"[BMU] Timeout / partial frame ({buffer.Count} bytes): {ToHex([.. buffer], buffer.Count)}");
-            return [];
+                Log($"[BMU] Timeout / partial frame ({buffer.Count} bytes): {ToHex(buffer.ToArray(), buffer.Count)}");
+            return Array.Empty<byte>();
         }
         catch (Exception ex)
         {
             Log($"[BMU] Read error: {ex.Message}");
             _faulted = true;
-            return [];
+            return Array.Empty<byte>();
         }
     }
 
-    public Dictionary<string, double> ReadResponse()
+    public Dictionary<string, double>? ReadResponse()
     {
         var frame = ReadFrame();
         if (frame == null || frame.Length < 9)
@@ -253,7 +253,7 @@ public class BmuRs485Client : IDisposable
                 _faulted = true;
             }
             CheckDataTimeout();
-            return null!;
+            return null;
         }
 
         if (frame[0] == 0xAF && frame[1] == 0xFA)
@@ -263,7 +263,10 @@ public class BmuRs485Client : IDisposable
         else if (frame[0] == 0x4D)
         {
             Log("[BMU] Decode from 4D partial frame");
-            frame = [0xAF, 0xFA, .. frame];
+            var newFrame = new byte[frame.Length + 2];
+            newFrame[0] = 0xAF; newFrame[1] = 0xFA;
+            Array.Copy(frame, 0, newFrame, 2, frame.Length);
+            frame = newFrame;
         }
         else
         {
@@ -274,11 +277,19 @@ public class BmuRs485Client : IDisposable
                 _faulted = true;
             }
             CheckDataTimeout();
-            return null!;
+            return null;
         }
 
-        if (frame[^2] != 0xAF || frame[^1] != 0xA0) return null!;
-        if (frame[4] != 0x03) return null!;
+        if (frame[^2] != 0xAF || frame[^1] != 0xA0)
+        {
+            Log("[BMU] Footer mismatch");
+            throw new Exception("invalid frame: footer");
+        }
+        if (frame[4] != 0x03)
+        {
+            Log("[BMU] Command code mismatch");
+            throw new Exception("invalid frame: command");
+        }
 
         var result = new Dictionary<string, double>();
         int dataLen = frame[3] - 3;
@@ -313,6 +324,21 @@ public class BmuRs485Client : IDisposable
         return result;
     }
 
+    public void ForceReconnect()
+    {
+        lock (_lock)
+        {
+            try
+            {
+                _port?.Close();
+            }
+            catch { }
+            _faulted = false;
+            _lastRetry = DateTime.MinValue;
+            _retryDelayMs = 1000;
+            EnsureConnected();
+        }
+    }
 
     private static void Log(string msg)
     {
