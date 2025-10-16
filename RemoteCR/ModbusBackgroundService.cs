@@ -13,9 +13,20 @@ namespace RemoteCR
 
         public ModbusBackgroundService()
         {
-            _mb = new ModbusRtuClient("COM4"); // ⚠ chỉnh COM port
+            _mb = new ModbusRtuClient("COM4");
         }
-
+        // Giải mã dữ liệu đọc về theo mapping trong tài liệu (2 thanh ghi từ 0x0001) → 4 bytes
+        // regs[0] = Word0 (H), regs[1] = Word1 (H?) — lưu ý: mỗi "Word" ở Modbus là 16-bit big-endian.
+        // Ở tài liệu: Data0..Data3 là 4 byte theo thứ tự [Word0_H][Word0_L][Word1_H][Word1_L]
+        public static (byte data0, byte data1, byte data2, byte data3) ToBytes(ushort[] regs)
+        {
+            if (regs == null || regs.Length < 2) throw new ArgumentException("Need 2 registers");
+            byte data0 = (byte)(regs[0] >> 8);
+            byte data1 = (byte)(regs[0] & 0xFF);
+            byte data2 = (byte)(regs[1] >> 8);
+            byte data3 = (byte)(regs[1] & 0xFF);
+            return (data0, data1, data2, data3);
+        }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             (byte oldD0, byte oldD1, byte oldD2, byte oldD3) = (0, 0, 0, 0);
@@ -25,7 +36,7 @@ namespace RemoteCR
                 try
                 {
                     var regs = _mb.ReadHoldingRegisters(_slave, 0x0001, 3);
-                    var (d0, d1, d2, d3) = ProtocolHelpers.ToBytes(regs);
+                    var (d0, d1, d2, d3) = ToBytes(regs);
 
                     if (d0 != oldD0 || d1 != oldD1 || d2 != oldD2 || d3 != oldD3)
                     {
@@ -68,7 +79,7 @@ namespace RemoteCR
                 await Task.Delay(200, stoppingToken);
             }
         }
-        private string DecodeMode(byte d2)
+        private static string DecodeMode(byte d2)
         {
             byte low = (byte)(d2 & 0x0F); // chỉ lấy 4 bit thấp
             return low switch
@@ -80,7 +91,7 @@ namespace RemoteCR
             };
         }
 
-        private string BuildActionString(DeviceState s)
+        private static string BuildActionString(DeviceState s)
         {
             if (s.LiftUp) return "Lift Up";
             if (s.LiftDown) return "Lift Down";

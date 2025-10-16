@@ -26,7 +26,7 @@ public enum DataKind2 : byte
     RemainCapacity = 1 << 1,
     RemainEnergy = 1 << 2
 }
-public class BmuRs485Client : IDisposable
+public class TadaRs485Client : IDisposable
 {
     private SerialPort _port;
     private readonly string _portName;
@@ -46,7 +46,7 @@ public class BmuRs485Client : IDisposable
     private int _consecutiveFails = 0;
     private readonly int _maxFails = 3; // sau 3 lần fail liên tiếp thì coi như lost
 
-    public BmuRs485Client(
+    public TadaRs485Client(
         string portName,
         int baud = 19200,
         Parity parity = Parity.None,
@@ -201,7 +201,6 @@ public class BmuRs485Client : IDisposable
                             expectedLen = buffer[2] + 5; // vì mất 2 byte start
                         }
                     }
-
 
                     if (expectedLen > 0 && buffer.Count >= expectedLen)
                     {

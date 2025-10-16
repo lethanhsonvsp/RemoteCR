@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace RemoteCR;
 
-public class BmuService : IDisposable
+public class TadaService : IDisposable
 {
-    private readonly BmuRs485Client _client;
+    private readonly TadaRs485Client _client;
     private readonly System.Threading.Timer _timer;
     private bool _inLoop = false;
 
@@ -17,14 +17,12 @@ public class BmuService : IDisposable
     public int SuccessCount { get; private set; } = 0;
     public int ErrorCount { get; private set; } = 0;
 
-    public Dictionary<string, double> LastData { get; private set; } = new();
-    public List<string> LastAlarms { get; private set; } = new();
+    public Dictionary<string, double> LastData { get; private set; } = [];
+    public List<string> LastAlarms { get; private set; } = [];
     public const string PortName = "COM4";
 
-    // thống kê
     public ConcurrentDictionary<string, int> ErrorStats { get; } = new();
 
-    // thêm các thống kê yêu cầu
     public int ChargeCount { get; private set; } = 0;
     public int DischargeCount { get; private set; } = 0;
     public bool BatteryEnabled { get; private set; } = true; // giả định true, có thể gán từ config
@@ -32,9 +30,9 @@ public class BmuService : IDisposable
     public string LastComError { get; private set; } = string.Empty;
     public int FrameMismatchCount { get; private set; } = 0;
 
-    public BmuService()
+    public TadaService()
     {
-        _client = new BmuRs485Client(PortName);
+        _client = new TadaRs485Client(PortName);
         StartTime = DateTime.Now;
         _timer = new System.Threading.Timer(Loop, null, 0, 500);
     }

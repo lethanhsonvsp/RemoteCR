@@ -1,7 +1,7 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 
-@inject RemoteCR.BmuService BmuService
+@inject RemoteCR.TadaService BmuService
 @implements IDisposable
 
 <h1>ĐANG TEST PIN KHÔNG ĐỘNG VÀO</h1>
@@ -111,7 +111,7 @@ else
 
 @code {
     private Dictionary<string, double> data = new();
-    private System.Threading.Timer timer;
+    private System.Threading.Timer? timer;
 
     private readonly Dictionary<string, string> Meanings = new()
     {

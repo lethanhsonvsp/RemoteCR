@@ -19,6 +19,7 @@ namespace RemoteCR
         public void Dispose()
         {
             try { _port?.Close(); } catch { /* ignore */ }
+            GC.SuppressFinalize(this);
         }
 
         // ---- CRC16 (Modbus) ----
@@ -44,8 +45,8 @@ namespace RemoteCR
             ushort crc = Crc16(req, req.Length);
             byte[] frame = new byte[req.Length + 2];
             Array.Copy(req, frame, req.Length);
-            frame[frame.Length - 2] = (byte)(crc & 0xFF);       // CRC Lo
-            frame[frame.Length - 1] = (byte)(crc >> 8 & 0xFF);// CRC Hi
+            frame[^2] = (byte)(crc & 0xFF);       // CRC Lo
+            frame[^1] = (byte)(crc >> 8 & 0xFF);// CRC Hi
 
             // Write
             _port.DiscardInBuffer();
@@ -74,12 +75,12 @@ namespace RemoteCR
         /// </summary>
         public ushort[] ReadHoldingRegisters(byte slave, ushort startAddr, ushort quantity)
         {
-            byte[] pdu = new byte[]
-            {
+            byte[] pdu =
+            [
                 slave, 0x03,
                 (byte)(startAddr >> 8), (byte)(startAddr & 0xFF),
                 (byte)(quantity >> 8), (byte)(quantity & 0xFF),
-            };
+            ];
 
             // Expected response: [slave][0x03][byteCount][data...][CRClo][CRChi]
             int byteCount = quantity * 2;
