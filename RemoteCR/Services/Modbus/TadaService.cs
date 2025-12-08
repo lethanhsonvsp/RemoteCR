@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace RemoteCR;
+namespace RemoteCR.Services.Modbus;
 
 public class TadaService : IDisposable
 {

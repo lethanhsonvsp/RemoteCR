@@ -1,6 +1,7 @@
 ﻿@page "/counter"
+@using RemoteCR.Services.Modbus
 @rendermode InteractiveServer
-@inject RemoteCR.ModbusBackgroundService ModbusService 
+@inject ModbusBackgroundService ModbusService 
 
 <h3 class="mb-4 fw-bold text-dark">📡 Trạng thái thiết bị RS-485</h3>
 
@@ -111,7 +112,7 @@ else
 </style>
 
 @code {
-    private RemoteCR.DeviceState? state;
+    private DeviceState? state;
 
     protected override void OnInitialized()
     {

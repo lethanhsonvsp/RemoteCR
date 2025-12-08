@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO.Ports;
 
-namespace RemoteCR;
+namespace RemoteCR.Services.Modbus;
 
 public class ModbusRtuClient : IDisposable
 {

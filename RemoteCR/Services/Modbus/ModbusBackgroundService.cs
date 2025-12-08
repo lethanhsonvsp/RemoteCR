@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 
-namespace RemoteCR
+namespace RemoteCR.Services.Modbus
 {
     public class ModbusBackgroundService : BackgroundService
     {

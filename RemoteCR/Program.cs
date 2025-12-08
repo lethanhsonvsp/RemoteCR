@@ -1,5 +1,7 @@
 ﻿using RemoteCR;
 using RemoteCR.Components;
+using RemoteCR.Services.Can;
+using RemoteCR.Services.Modbus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,11 @@ builder.Services.AddSingleton<ModbusBackgroundService>();
 //builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
 builder.Services.AddSingleton(new TadaService());
 builder.Services.AddSignalR();
+
+builder.Services.AddSingleton<ChargerState>();
+builder.Services.AddSingleton<CanStateContainer>();   // MUST be above DeltaDecoder
+builder.Services.AddSingleton<DeltaDecoder>();
+builder.Services.AddHostedService<CanReaderService>();
 
 var app = builder.Build();
 
@@ -29,5 +36,6 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+app.MapHub<ChargerHub>("/charger");
 
 app.Run();

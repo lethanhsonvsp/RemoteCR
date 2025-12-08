@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace RemoteCR;
+namespace RemoteCR.Services.Modbus;
 
 [Flags]
 public enum DataKind1 : byte

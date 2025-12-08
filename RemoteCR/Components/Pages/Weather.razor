@@ -1,64 +1,36 @@
 ﻿@page "/weather"
-@attribute [StreamRendering]
+@page "/"
+@rendermode InteractiveServer
 
-<PageTitle>Weather</PageTitle>
+@inject RemoteCR.Services.Can.CanStateContainer State
 
-<h1>Weather</h1>
+<h1>Delta 1kW Wireless Charger</h1>
 
-<p>This component demonstrates showing data.</p>
+<div class="card p-3">
+    <p><b>Voltage:</b> @State.Voltage:F2 V</p>
+    <p><b>Current:</b> @State.Current:F2 A</p>
+    <p><b>Power:</b> @State.Power:F0 W</p>
+    <p><b>Gap:</b> @State.Gap mm</p>
+    <p><b>Primary Temp:</b> @State.PriTemp °C</p>
+    <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
+</div>
 
-@if (forecasts == null)
+@if (State.Faults.Count > 0)
 {
-    <p><em>Loading...</em></p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th aria-label="Temperature in Celsius">Temp. (C)</th>
-                <th aria-label="Temperature in Farenheit">Temp. (F)</th>
-                <th>Summary</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var forecast in forecasts)
+    <div class="alert alert-danger mt-3">
+        <h4>Faults:</h4>
+        <ul>
+            @foreach (var f in State.Faults)
             {
-                <tr>
-                    <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
-                    <td>@forecast.TemperatureF</td>
-                    <td>@forecast.Summary</td>
-                </tr>
+                <li>@f</li>
             }
-        </tbody>
-    </table>
+        </ul>
+    </div>
 }
 
 @code {
-    private WeatherForecast[]? forecasts;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Simulate asynchronous loading to demonstrate streaming rendering
-        await Task.Delay(500);
-
-        var startDate = DateOnly.FromDateTime(DateTime.Now);
-        var summaries = new[] { "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching" };
-        forecasts = Enumerable.Range(1, 5).Select(index => new WeatherForecast
-        {
-            Date = startDate.AddDays(index),
-            TemperatureC = Random.Shared.Next(-20, 55),
-            Summary = summaries[Random.Shared.Next(summaries.Length)]
-        }).ToArray();
-    }
-
-    private class WeatherForecast
-    {
-        public DateOnly Date { get; set; }
-        public int TemperatureC { get; set; }
-        public string? Summary { get; set; }
-        public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+        State.OnChange += () => InvokeAsync(StateHasChanged);
     }
 }
