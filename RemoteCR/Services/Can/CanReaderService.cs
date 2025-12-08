@@ -17,6 +17,7 @@ public class CanReaderService : BackgroundService
         _can.OnFrameReceived += frame =>
         {
             _decoder.Decode(frame.Id, frame.Dlc, frame.Data);
+            // Console.WriteLine($"Received CAN frame: ID=0x{frame.Id:X}, DLC={frame.Dlc}");
         };
     }
 

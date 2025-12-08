@@ -8,9 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-builder.Services.AddSingleton<ModbusBackgroundService>();
+// builder.Services.AddSingleton<ModbusBackgroundService>();
 //builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
-builder.Services.AddSingleton(new TadaService());
+// builder.Services.AddSingleton(new TadaService());
 builder.Services.AddSignalR();
 
 builder.Services.AddSingleton<ChargerState>();
