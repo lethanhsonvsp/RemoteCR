@@ -10,7 +10,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 // builder.Services.AddSingleton<ModbusBackgroundService>();
 //builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
-// builder.Services.AddSingleton(new TadaService());
+builder.Services.AddSingleton(new TadaService());
 builder.Services.AddSignalR();
 
 builder.Services.AddSingleton<ChargerState>();
@@ -36,6 +36,5 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
-app.MapHub<ChargerHub>("/charger");
 
 app.Run();

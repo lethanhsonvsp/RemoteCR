@@ -9,7 +9,9 @@ public class SocketCan
     private const int SOCK_RAW = 3;
     private const int CAN_RAW = 1;
 
-    private int _socket;
+    private readonly int _socket;
+
+    public bool IsConnected { get; private set; } = false;
 
     public event Action<CanFrame>? OnFrameReceived;
 
@@ -59,7 +61,7 @@ public class SocketCan
         }
     }
 
-    // ----------- libc syscalls ---------------
+    // Linux syscalls
     [DllImport("libc", SetLastError = true)]
     static extern int socket(int domain, int type, int protocol);
 
@@ -72,40 +74,90 @@ public class SocketCan
     [DllImport("libc", SetLastError = true)]
     static extern int read(int fd, byte[] buffer, int count);
 
+    [DllImport("libc", SetLastError = true)]
+    static extern int write(int fd, byte[] buffer, int count);
+
     const uint SIOCGIFINDEX = 0x8933;
 
     public SocketCan(string iface)
     {
-        // 1) Create raw CAN socket using native syscall
-        _socket = socket(AF_CAN, SOCK_RAW, CAN_RAW);
-        if (_socket < 0)
-            throw new Exception("socket(AF_CAN) failed. PF_CAN not enabled in .NET build?");
-
-        // 2) Get interface index
-        var ifr = new ifreq(iface);
-        if (ioctl(_socket, SIOCGIFINDEX, ref ifr) < 0)
-            throw new Exception($"Interface '{iface}' not found.");
-
-        // 3) Bind to CAN interface
-        var addr = new sockaddr_can
+        try
         {
-            can_family = AF_CAN,
-            can_ifindex = ifr.ifr_ifindex
-        };
+            _socket = socket(AF_CAN, SOCK_RAW, CAN_RAW);
+            if (_socket < 0)
+            {
+                IsConnected = false;
+                return;
+            }
 
-        if (bind(_socket, ref addr, Marshal.SizeOf<sockaddr_can>()) < 0)
-            throw new Exception($"Bind to {iface} failed.");
+            var ifr = new ifreq(iface);
+            if (ioctl(_socket, SIOCGIFINDEX, ref ifr) < 0)
+            {
+                IsConnected = false;
+                return;
+            }
+
+            var addr = new sockaddr_can
+            {
+                can_family = AF_CAN,
+                can_ifindex = ifr.ifr_ifindex
+            };
+
+            if (bind(_socket, ref addr, Marshal.SizeOf<sockaddr_can>()) < 0)
+            {
+                IsConnected = false;
+                return;
+            }
+
+            IsConnected = true;
+        }
+        catch
+        {
+            IsConnected = false;
+        }
     }
 
-    public void StartReading()
+    /// <summary>
+    /// Gửi 1 frame CAN (ID 11-bit, DLC 0–8).
+    /// </summary>
+    public void Send(uint id, byte[] data)
+    {
+        if (!IsConnected) return;
+
+        if (data.Length > 8)
+            throw new ArgumentException("CAN Data must be <= 8 bytes");
+
+        var frame = new can_frame
+        {
+            can_id = id & 0x7FF, // 11-bit ID
+            can_dlc = (byte)data.Length,
+            data = new byte[8]
+        };
+
+        Array.Copy(data, frame.data, data.Length);
+
+        int size = Marshal.SizeOf<can_frame>();
+        byte[] buffer = StructToBytes(frame);
+
+        int result = write(_socket, buffer, size);
+
+        if (result < 0)
+            Console.WriteLine("⚠ CAN write() failed");
+    }
+
+    public void StartReading(CancellationToken token)
     {
         int size = Marshal.SizeOf<can_frame>();
         byte[] buffer = new byte[size];
 
-        while (true)
+        while (!token.IsCancellationRequested)
         {
             int n = read(_socket, buffer, size);
-            if (n <= 0) continue;
+            if (n <= 0)
+            {
+                IsConnected = false;
+                return; // báo lỗi cho CanReaderService
+            }
 
             var frame = ByteArrayToStruct<can_frame>(buffer);
 
@@ -124,5 +176,17 @@ public class SocketCan
         T obj = Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject())!;
         handle.Free();
         return obj;
+    }
+
+    private static byte[] StructToBytes(object obj)
+    {
+        int size = Marshal.SizeOf(obj);
+        byte[] arr = new byte[size];
+
+        GCHandle handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
+        Marshal.StructureToPtr(obj, handle.AddrOfPinnedObject(), false);
+        handle.Free();
+
+        return arr;
     }
 }

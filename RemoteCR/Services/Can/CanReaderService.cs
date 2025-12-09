@@ -8,19 +8,45 @@ public class CanReaderService : BackgroundService
 {
     private readonly SocketCan _can;
     private readonly DeltaDecoder _decoder;
+    private readonly CanStateContainer _state;
 
-    public CanReaderService(DeltaDecoder decoder)
+    public CanReaderService(DeltaDecoder decoder, CanStateContainer state)
     {
         _decoder = decoder;
+        _state = state;
+
         _can = new SocketCan("can0");
+        _state.IsConnected = _can.IsConnected;
+
+        // thông báo UI ngay lần đầu
+        _state.NotifyChanged();
 
         _can.OnFrameReceived += frame =>
         {
+            if (!_state.IsConnected)
+            {
+                _state.IsConnected = true;
+                _state.NotifyChanged();
+            }
+
             _decoder.Decode(frame.Id, frame.Dlc, frame.Data);
-            // Console.WriteLine($"Received CAN frame: ID=0x{frame.Id:X}, DLC={frame.Dlc}");
         };
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
-        => Task.Run(() => _can.StartReading());
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                _can.StartReading(stoppingToken);
+            }
+            catch
+            {
+                // mất kết nối CAN
+                _state.IsConnected = false;
+                _state.NotifyChanged();
+            }
+        }, stoppingToken);
+    }
 }
