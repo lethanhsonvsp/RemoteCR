@@ -67,14 +67,14 @@
             </small>
         </h3>
         <h4>Electrical</h4>
-        <p><b>Voltage:</b> @State.Voltage V</p>
-        <p><b>Current:</b> @State.Current: A</p>
+        <p><b>Voltage:</b> @(State.Voltage.ToString("F2")) V</p>
+        <p><b>Current:</b> @(State.Current.ToString("F2")) A</p>
         <p><b>Power:</b> @State.Power: W</p>
 
         <h4 class="mt-3">Wireless Parameters</h4>
         <p><b>Gap:</b> @State.Gap mm</p>
-        <p><b>Primary Temp:</b> @State.PriTemp °C</p>
-        <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
+        <p><b>Primary Temp:</b> @(State.PriTemp < 0 ? "???" : State.PriTemp + " °C")</p>
+        <p><b>Secondary Temp:</b> @(State.SecTemp < 0 ? "???" : State.SecTemp + " °C")</p>
         <div class="input-group input-group-sm mb-1">
             <span class="input-group-text">current</span>
             <input type="number" class="form-control" @bind="current" />
