@@ -163,9 +163,17 @@
     double voltage;
     double current;
     private void SendOnceOn() => dccs.SendOnce(voltage, current, true);
-    private void SendOnceOff() => dccs.SendOnce(voltage, current, false);
+    private void SendOnceOff()
+    {
+        dccs.SendOnce(voltage, current, false);
+        dccs.StopLoop();
+    }
     private void StartLoopOn() => dccs.StartLoop(voltage, current, true);
-    private void StartLoopOff() => dccs.StartLoop(voltage, current, false);
+    private void StartLoopOff() 
+    {
+        dccs.StartLoop(voltage, current, false);
+        dccs.StopLoop();
+    }
 
     private async Task TryReconnect() => await BmuService.TryReconnectAsync();
 
