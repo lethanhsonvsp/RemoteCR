@@ -10,12 +10,13 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 // builder.Services.AddSingleton<ModbusBackgroundService>();
 //builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundService>());
-builder.Services.AddSingleton(new TadaService());
 builder.Services.AddSignalR();
+builder.Services.AddSingleton(new TadaService());
 
-builder.Services.AddSingleton<CanStateContainer>();   // MUST be above DeltaDecoder
 builder.Services.AddSingleton<DeltaDecoder>();
+builder.Services.AddSingleton<CanStateContainer>();   // MUST be above DeltaDecoder
 builder.Services.AddHostedService<CanReaderService>();
+builder.Services.AddSingleton<DeltaChargerCommandService>();
 
 var app = builder.Build();
 

@@ -5,6 +5,7 @@
 @inject TadaService BmuService
 @implements IDisposable
 @inject RemoteCR.Services.Can.CanStateContainer State
+@inject RemoteCR.Services.Can.DeltaChargerCommandService dccs
 
 <style>
     .status-dot {
@@ -74,7 +75,10 @@
         <p><b>Gap:</b> @State.Gap mm</p>
         <p><b>Primary Temp:</b> @State.PriTemp °C</p>
         <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
-
+        <button class="btn btn-sm btn-primary" @onclick="SendOnceOn">Once On</button>
+        <button class="btn btn-sm btn-primary" @onclick="SendOnceOff">Once Off</button>
+        <button class="btn btn-sm btn-primary" @onclick="StartLoopOn">S On</button>
+        <button class="btn btn-sm btn-primary" @onclick="StartLoopOff">S Off</button>
         @if (State.Status.Any())
         {
             <div class="alert alert-info mt-3">
@@ -226,6 +230,12 @@
 
         return map.TryGetValue(key, out var meaning) ? meaning : "-";
     }
+    double voltage;
+    double current;
+    private void SendOnceOn() => dccs.SendOnce( voltage,  current, true);
+    private void SendOnceOff() => dccs.SendOnce( voltage,  current, false);
+    private void StartLoopOn() => dccs.SendOnce(voltage, current, true);
+    private void StartLoopOff() => dccs.SendOnce(voltage, current, false);
 
     private async Task TryReconnect() => await BmuService.TryReconnectAsync();
 
