@@ -67,18 +67,29 @@
             </small>
         </h3>
         <h4>Electrical</h4>
-        <p><b>Voltage:</b> @State.Voltage:F2 V</p>
-        <p><b>Current:</b> @State.Current:F2 A</p>
-        <p><b>Power:</b> @State.Power:F2 W</p>
+        <p><b>Voltage:</b> @State.Voltage V</p>
+        <p><b>Current:</b> @State.Current: A</p>
+        <p><b>Power:</b> @State.Power: W</p>
 
         <h4 class="mt-3">Wireless Parameters</h4>
         <p><b>Gap:</b> @State.Gap mm</p>
         <p><b>Primary Temp:</b> @State.PriTemp °C</p>
         <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
+        <div class="input-group input-group-sm mb-1">
+            <span class="input-group-text">current</span>
+            <input type="number" class="form-control" @bind="current" />
+            <span class="input-group-text">voltage</span>
+            <input type="number" class="form-control" @bind="voltage" />
+        </div>
         <button class="btn btn-sm btn-primary" @onclick="SendOnceOn">Once On</button>
         <button class="btn btn-sm btn-primary" @onclick="SendOnceOff">Once Off</button>
         <button class="btn btn-sm btn-primary" @onclick="StartLoopOn">S On</button>
         <button class="btn btn-sm btn-primary" @onclick="StartLoopOff">S Off</button>
+    </div>
+
+
+
+    <div class="card-block">
         @if (State.Status.Any())
         {
             <div class="alert alert-info mt-3">
@@ -111,87 +122,6 @@
             <p><b>MCU2:</b> @State.RevMCU2</p>
             <p><b>DSP:</b> @State.RevDSP</p>
         </div>
-    </div>
-
-
-    <!-- =========================== -->
-    <!-- 🔶 RIGHT: BATTERY (TADA BMU) -->
-    <!-- =========================== -->
-
-    <div class="card-block">
-
-        <h2 class="mb-3">🔌 Tada Battery Monitor</h2>
-
-        @if (data == null || data.Count == 0)
-        {
-            <p>⏳ Đang chờ dữ liệu...</p>
-        }
-        else
-        {
-            <table class="table table-bordered table-sm">
-                <thead class="table-light">
-                    <tr>
-                        <th>Thông số</th>
-                        <th>Ý nghĩa</th>
-                        <th>Giá trị</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in data)
-                    {
-                        <tr>
-                            <td>@item.Key</td>
-                            <td>@GetMeaning(item.Key, item.Value)</td>
-                            <td>@item.Value</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-
-        <h4 class="mt-4">📊 Thống kê</h4>
-        <table class="table table-bordered table-sm">
-            <tbody>
-                <tr><td>Thời gian bắt đầu</td><td>@BmuService.StartTime</td></tr>
-                <tr><td>Uptime</td><td>@BmuService.Uptime.ToString(@"hh\:mm\:ss")</td></tr>
-                <tr><td>Số lần OK</td><td>@BmuService.SuccessCount</td></tr>
-                <tr><td>Số lần lỗi</td><td>@BmuService.ErrorCount</td></tr>
-                <tr><td>Số lần sạc</td><td>@BmuService.ChargeCount</td></tr>
-                <tr><td>Số lần xả</td><td>@BmuService.DischargeCount</td></tr>
-                <tr><td>Pin bật?</td><td>@(BmuService.BatteryEnabled ? "Bật" : "Tắt")</td></tr>
-                <tr><td>Đang sạc?</td><td>@(BmuService.IsCharging ? "Có" : "Không")</td></tr>
-                <tr><td>Lỗi COM gần nhất</td><td>@BmuService.LastComError</td></tr>
-                <tr><td>Frame mismatch</td><td>@BmuService.FrameMismatchCount</td></tr>
-            </tbody>
-        </table>
-
-        <h4 class="mt-4">❌ Thống kê lỗi</h4>
-        @if (BmuService.ErrorStats.Count == 0)
-        {
-            <p>Không có lỗi.</p>
-        }
-        else
-        {
-            <table class="table table-bordered table-sm">
-                <thead class="table-light">
-                    <tr>
-                        <th>Loại lỗi</th>
-                        <th>Số lần</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var kv in BmuService.ErrorStats)
-                    {
-                        <tr>
-                            <td>@kv.Key</td>
-                            <td>@kv.Value</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-
-        <button class="btn btn-sm btn-primary" @onclick="TryReconnect">Kết nối lại</button>
 
     </div>
 
@@ -232,8 +162,8 @@
     }
     double voltage;
     double current;
-    private void SendOnceOn() => dccs.SendOnce( voltage,  current, true);
-    private void SendOnceOff() => dccs.SendOnce( voltage,  current, false);
+    private void SendOnceOn() => dccs.SendOnce(voltage, current, true);
+    private void SendOnceOff() => dccs.SendOnce(voltage, current, false);
     private void StartLoopOn() => dccs.SendOnce(voltage, current, true);
     private void StartLoopOff() => dccs.SendOnce(voltage, current, false);
 

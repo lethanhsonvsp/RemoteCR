@@ -13,10 +13,13 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSignalR();
 builder.Services.AddSingleton(new TadaService());
 
+builder.Services.AddSingleton<SocketCan>(_ => new SocketCan("can0"));
+builder.Services.AddSingleton<CanStateContainer>();
 builder.Services.AddSingleton<DeltaDecoder>();
-builder.Services.AddSingleton<CanStateContainer>();   // MUST be above DeltaDecoder
-builder.Services.AddHostedService<CanReaderService>();
 builder.Services.AddSingleton<DeltaChargerCommandService>();
+
+builder.Services.AddHostedService<CanReaderService>();
+
 
 var app = builder.Build();
 

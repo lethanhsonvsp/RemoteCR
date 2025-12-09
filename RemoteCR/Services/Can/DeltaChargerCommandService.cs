@@ -57,6 +57,7 @@ public class DeltaChargerCommandService
         };
 
         _can.Send(0x190, data);
+        Console.WriteLine($"➡ Sent 0x190: {BitConverter.ToString(data).Replace("-", " ")}");
     }
 
     /// <summary>
@@ -80,7 +81,9 @@ public class DeltaChargerCommandService
             while (!_loopCts.IsCancellationRequested)
             {
                 Send190(voltage, current, on);
+                Console.WriteLine($"{voltage} -- {current} -- {on}");
                 await Task.Delay(100); // Delta khuyến nghị 100ms
+
             }
         });
     }
