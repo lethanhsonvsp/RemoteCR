@@ -13,7 +13,6 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton(new TadaService());
 builder.Services.AddSignalR();
 
-builder.Services.AddSingleton<ChargerState>();
 builder.Services.AddSingleton<CanStateContainer>();   // MUST be above DeltaDecoder
 builder.Services.AddSingleton<DeltaDecoder>();
 builder.Services.AddHostedService<CanReaderService>();

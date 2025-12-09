@@ -6,195 +6,201 @@
 @implements IDisposable
 @inject RemoteCR.Services.Can.CanStateContainer State
 
-<h1>Delta 1kW Wireless Charger</h1>
+<style>
+    .status-dot {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        margin-left: 10px;
+    }
 
-<div class="card p-3">
-    <p><b>Voltage:</b> @State.Voltage:F2 V</p>
-    <p><b>Current:</b> @State.Current:F2 A</p>
-    <p><b>Power:</b> @State.Power:F0 W</p>
-    <p><b>Gap:</b> @State.Gap mm</p>
-    <p><b>Primary Temp:</b> @State.PriTemp °C</p>
-    <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
-</div>
+        .status-dot.online {
+            background-color: #28a745;
+            box-shadow: 0 0 8px #28a745;
+        }
 
-@if (State.Faults.Count > 0)
-{
-    <div class="alert alert-danger mt-3">
-        <h4>Faults:</h4>
-        <ul>
-            @foreach (var f in State.Faults)
-            {
-                <li>@f</li>
-            }
-        </ul>
+        .status-dot.offline {
+            background-color: #dc3545;
+            box-shadow: 0 0 8px #dc3545;
+        }
+
+    /* ---- GRID LAYOUT 1x2 ---- */
+    .grid-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    /* Responsive: tự xuống 1 cột khi màn hình nhỏ */
+    @@media (max-width: 992px) {
+        .grid-container {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .card-block {
+        padding: 20px;
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 0 12px rgba(0,0,0,0.10);
+    }
+</style>
+
+<h1 class="mb-4">🔋 Charger & Battery Dashboard</h1>
+
+<div class="grid-container">
+
+    <!-- ====================== -->
+    <!-- 🔷 LEFT: DELTA CHARGER -->
+    <!-- ====================== -->
+
+    <div class="card-block">
+        <h2 class="mb-3 d-flex align-items-center">
+            Delta 1kW Wireless Charger
+        </h2>
+        <h3>
+            <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
+            <small class="ms-2">
+                @(State.IsConnected ? "Connected" : "Disconnected")
+            </small>
+        </h3>
+        <h4>Electrical</h4>
+        <p><b>Voltage:</b> @State.Voltage:F2 V</p>
+        <p><b>Current:</b> @State.Current:F2 A</p>
+        <p><b>Power:</b> @State.Power:F2 W</p>
+
+        <h4 class="mt-3">Wireless Parameters</h4>
+        <p><b>Gap:</b> @State.Gap mm</p>
+        <p><b>Primary Temp:</b> @State.PriTemp °C</p>
+        <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
+
+        @if (State.Status.Any())
+        {
+            <div class="alert alert-info mt-3">
+                <h4>Status</h4>
+                <ul>
+                    @foreach (var s in State.Status)
+                    {
+                        <li>@s</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        @if (State.Faults.Any())
+        {
+            <div class="alert alert-danger mt-3">
+                <h4>Faults</h4>
+                <ul>
+                    @foreach (var f in State.Faults)
+                    {
+                        <li>@f</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="card p-3 mt-3">
+            <h4>Firmware Versions</h4>
+            <p><b>MCU1:</b> @State.RevMCU1</p>
+            <p><b>MCU2:</b> @State.RevMCU2</p>
+            <p><b>DSP:</b> @State.RevDSP</p>
+        </div>
     </div>
-}
 
 
+    <!-- =========================== -->
+    <!-- 🔶 RIGHT: BATTERY (TADA BMU) -->
+    <!-- =========================== -->
 
-@inject RemoteCR.Services.Can.CanStateContainer State
+    <div class="card-block">
 
-<h1 class="mb-3 d-flex align-items-center">
-    Delta 1kW Wireless Charger
+        <h2 class="mb-3">🔌 Tada Battery Monitor</h2>
 
-    <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
+        @if (data == null || data.Count == 0)
+        {
+            <p>⏳ Đang chờ dữ liệu...</p>
+        }
+        else
+        {
+            <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                    <tr>
+                        <th>Thông số</th>
+                        <th>Ý nghĩa</th>
+                        <th>Giá trị</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in data)
+                    {
+                        <tr>
+                            <td>@item.Key</td>
+                            <td>@GetMeaning(item.Key, item.Value)</td>
+                            <td>@item.Value</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
 
-    <small class="ms-2">
-        @(State.IsConnected ? "Connected" : "Disconnected")
-    </small>
-</h1>
+        <h4 class="mt-4">📊 Thống kê</h4>
+        <table class="table table-bordered table-sm">
+            <tbody>
+                <tr><td>Thời gian bắt đầu</td><td>@BmuService.StartTime</td></tr>
+                <tr><td>Uptime</td><td>@BmuService.Uptime.ToString(@"hh\:mm\:ss")</td></tr>
+                <tr><td>Số lần OK</td><td>@BmuService.SuccessCount</td></tr>
+                <tr><td>Số lần lỗi</td><td>@BmuService.ErrorCount</td></tr>
+                <tr><td>Số lần sạc</td><td>@BmuService.ChargeCount</td></tr>
+                <tr><td>Số lần xả</td><td>@BmuService.DischargeCount</td></tr>
+                <tr><td>Pin bật?</td><td>@(BmuService.BatteryEnabled ? "Bật" : "Tắt")</td></tr>
+                <tr><td>Đang sạc?</td><td>@(BmuService.IsCharging ? "Có" : "Không")</td></tr>
+                <tr><td>Lỗi COM gần nhất</td><td>@BmuService.LastComError</td></tr>
+                <tr><td>Frame mismatch</td><td>@BmuService.FrameMismatchCount</td></tr>
+            </tbody>
+        </table>
 
-<div class="card p-3 mb-3">
-    <h4>Electrical</h4>
-    <p><b>Voltage:</b> @State.Voltage:F2 V</p>
-    <p><b>Current:</b> @State.Current:F2 A</p>
-    <p><b>Power:</b> @State.Power:F2 W</p>
+        <h4 class="mt-4">❌ Thống kê lỗi</h4>
+        @if (BmuService.ErrorStats.Count == 0)
+        {
+            <p>Không có lỗi.</p>
+        }
+        else
+        {
+            <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                    <tr>
+                        <th>Loại lỗi</th>
+                        <th>Số lần</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var kv in BmuService.ErrorStats)
+                    {
+                        <tr>
+                            <td>@kv.Key</td>
+                            <td>@kv.Value</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
 
-    <h4 class="mt-3">Wireless Parameters</h4>
-    <p><b>Gap:</b> @State.Gap mm</p>
-    <p><b>Primary Temp:</b> @State.PriTemp °C</p>
-    <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
-</div>
+        <button class="btn btn-sm btn-primary" @onclick="TryReconnect">Kết nối lại</button>
 
-@if (State.Status.Any())
-{
-    <div class="alert alert-info mt-3">
-        <h4>Status</h4>
-        <ul>
-            @foreach (var s in State.Status)
-            {
-                <li>@s</li>
-            }
-        </ul>
     </div>
-}
 
-@if (State.Faults.Any())
-{
-    <div class="alert alert-danger mt-3">
-        <h4>Faults</h4>
-        <ul>
-            @foreach (var f in State.Faults)
-            {
-                <li>@f</li>
-            }
-        </ul>
-    </div>
-}
-
-<div class="card p-3 mt-3">
-    <h4>Firmware Versions</h4>
-    <p><b>MCU1:</b> @State.RevMCU1</p>
-    <p><b>MCU2:</b> @State.RevMCU2</p>
-    <p><b>DSP:</b> @State.RevDSP</p>
 </div>
-
-
-<h1>ĐANG TEST PIN KHÔNG ĐỘNG VÀO</h1>
-
-<h3>🔋 BMU Monitor</h3>
-
-@if (data == null || data.Count == 0)
-{
-    <p>⏳ Đang chờ dữ liệu...</p>
-}
-else
-{
-    <table class="table table-bordered table-sm">
-        <thead class="table-light">
-            <tr>
-                <th>Thông số</th>
-                <th>Ý nghĩa</th>
-                <th>Giá trị</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var item in data)
-            {
-                <tr>
-                    <td>@item.Key</td>
-                    <td>@GetMeaning(item.Key, item.Value)</td>
-                    <td>@item.Value</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
-
-<h4 class="mt-4">📊 Thống kê</h4>
-<table class="table table-bordered table-sm">
-    <tbody>
-        <tr>
-            <td>Thời gian bắt đầu</td>
-            <td>@BmuService.StartTime</td>
-        </tr>
-        <tr>
-            <td>Thời gian chạy (uptime)</td>
-            <td>@BmuService.Uptime.ToString(@"hh\:mm\:ss")</td>
-        </tr>
-        <tr>
-            <td>Số lần OK</td>
-            <td>@BmuService.SuccessCount</td>
-        </tr>
-        <tr>
-            <td>Số lần lỗi</td>
-            <td>@BmuService.ErrorCount</td>
-        </tr>
-        <tr>
-            <td>Số lần sạc</td>
-            <td>@BmuService.ChargeCount</td>
-        </tr>
-        <tr>
-            <td>Số lần xả</td>
-            <td>@BmuService.DischargeCount</td>
-        </tr>
-        <tr>
-            <td>Pin bật?</td>
-            <td>@(BmuService.BatteryEnabled ? "Bật" : "Tắt")</td>
-        </tr>
-        <tr>
-            <td>Đang sạc?</td>
-            <td>@(BmuService.IsCharging ? "Có" : "Không")</td>
-        </tr>
-        <tr>
-            <td>Lỗi COM gần nhất</td>
-            <td>@BmuService.LastComError</td>
-        </tr>
-        <tr>
-            <td>Frame mismatch</td>
-            <td>@BmuService.FrameMismatchCount</td>
-        </tr>
-    </tbody>
-</table>
-
-
-
-<button class="btn btn-sm btn-primary" @onclick="TryReconnect">Kết nối lại</button>
 
 @code {
     private Dictionary<string, double> data = new();
     private System.Threading.Timer? timer;
 
-    private readonly Dictionary<string, string> Meanings = new()
-    {
-        { "Voltage", "Điện áp (V)" },
-        { "Current", "Dòng điện (A)" },
-        { "SOC", "Dung lượng còn lại (%)" },
-        { "Status", "Trạng thái pin (bit flag)" },
-        { "ChargeTime", "Thời gian còn lại để sạc đầy (phút)" },
-        { "DischargeTime", "Thời gian còn lại để xả hết (phút)" },
-        { "Temp", "Nhiệt độ (°C)" },
-        { "SOH", "Tình trạng pin (%)" },
-        { "RemainCapacity", "Dung lượng còn lại (Ah)" },
-        { "RemainEnergy", "Năng lượng còn lại (Wh)" }
-    };
-
-
     protected override void OnInitialized()
     {
         State.OnChange += () => InvokeAsync(StateHasChanged);
 
-        // Timer UI làm mới mỗi 500ms
         timer = new System.Threading.Timer(_ =>
         {
             data = BmuService.LastData ?? new Dictionary<string, double>();
@@ -204,35 +210,24 @@ else
 
     private string GetMeaning(string key, double value)
     {
-        if (key == "Status")
+        var map = new Dictionary<string, string>
         {
-            int status = (int)value;
-            var alarms = new List<string>();
-            if ((status & (1 << 0)) != 0) alarms.Add("Over Voltage");
-            if ((status & (1 << 1)) != 0) alarms.Add("Low Voltage");
-            if ((status & (1 << 2)) != 0) alarms.Add("Charge Over Current");
-            if ((status & (1 << 3)) != 0) alarms.Add("Discharge Over Current");
-            if ((status & (1 << 4)) != 0) alarms.Add("High Temp");
-            if ((status & (1 << 5)) != 0) alarms.Add("Low Temp");
-            if ((status & (1 << 6)) != 0) alarms.Add("BMU Error");
+            { "Voltage", "Điện áp (V)" },
+            { "Current", "Dòng điện (A)" },
+            { "SOC", "Dung lượng còn lại (%)" },
+            { "Status", "Trạng thái pin (bit flag)" },
+            { "ChargeTime", "Thời gian sạc đầy (phút)" },
+            { "DischargeTime", "Thời gian xả hết (phút)" },
+            { "Temp", "Nhiệt độ (°C)" },
+            { "SOH", "Tình trạng pin (%)" },
+            { "RemainCapacity", "Dung lượng còn lại (Ah)" },
+            { "RemainEnergy", "Năng lượng còn lại (Wh)" }
+        };
 
-            return alarms.Count > 0
-                ? string.Join(", ", alarms)
-                : "Bình thường";
-        }
-
-        return Meanings.ContainsKey(key) ? Meanings[key] : "-";
+        return map.TryGetValue(key, out var meaning) ? meaning : "-";
     }
 
-    private async Task TryReconnect()
-    {
-        await BmuService.TryReconnectAsync();
-    }
+    private async Task TryReconnect() => await BmuService.TryReconnectAsync();
 
-    public void Dispose()
-    {
-        timer?.Dispose();
-    }
+    public void Dispose() => timer?.Dispose();
 }
-
-
