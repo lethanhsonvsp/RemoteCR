@@ -1,9 +1,36 @@
-﻿@page "/jjj"
+﻿@page "/"
 @using RemoteCR.Services.Modbus
 @rendermode InteractiveServer
 
 @inject TadaService BmuService
 @implements IDisposable
+@inject RemoteCR.Services.Can.CanStateContainer State
+
+<h1>Delta 1kW Wireless Charger</h1>
+
+<div class="card p-3">
+    <p><b>Voltage:</b> @State.Voltage:F2 V</p>
+    <p><b>Current:</b> @State.Current:F2 A</p>
+    <p><b>Power:</b> @State.Power:F0 W</p>
+    <p><b>Gap:</b> @State.Gap mm</p>
+    <p><b>Primary Temp:</b> @State.PriTemp °C</p>
+    <p><b>Secondary Temp:</b> @State.SecTemp °C</p>
+</div>
+
+@if (State.Faults.Count > 0)
+{
+    <div class="alert alert-danger mt-3">
+        <h4>Faults:</h4>
+        <ul>
+            @foreach (var f in State.Faults)
+            {
+                <li>@f</li>
+            }
+        </ul>
+    </div>
+}
+
+
 
 <h1>ĐANG TEST PIN KHÔNG ĐỘNG VÀO</h1>
 
@@ -128,8 +155,11 @@ else
         { "RemainEnergy", "Năng lượng còn lại (Wh)" }
     };
 
+
     protected override void OnInitialized()
     {
+        State.OnChange += () => InvokeAsync(StateHasChanged);
+
         // Timer UI làm mới mỗi 500ms
         timer = new System.Threading.Timer(_ =>
         {
