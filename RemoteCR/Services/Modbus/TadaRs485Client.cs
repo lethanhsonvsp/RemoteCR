@@ -341,7 +341,7 @@ public class TadaRs485Client : IDisposable
 
     private static void Log(string msg)
     {
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {msg}");
+        // Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {msg}");
     }
 
     public void Dispose()
