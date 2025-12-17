@@ -1,11 +1,14 @@
 ﻿@page "/"
-@using RemoteCR.Services.Modbus
 @rendermode InteractiveServer
 
+@using RemoteCR.Services.Modbus
+@using RemoteCR.Services.Can
+
 @inject TadaService BmuService
+@inject CanStateContainer State
+@inject DeltaChargerCommandService dccs
+
 @implements IDisposable
-@inject RemoteCR.Services.Can.CanStateContainer State
-@inject RemoteCR.Services.Can.DeltaChargerCommandService dccs
 
 <style>
     .status-dot {
@@ -26,14 +29,12 @@
             box-shadow: 0 0 8px #dc3545;
         }
 
-    /* ---- GRID LAYOUT 1x2 ---- */
     .grid-container {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 20px;
     }
 
-    /* Responsive: tự xuống 1 cột khi màn hình nhỏ */
     @@media (max-width: 992px) {
         .grid-container {
             grid-template-columns: 1fr;
@@ -52,63 +53,98 @@
 
 <div class="grid-container">
 
-    <!-- ====================== -->
-    <!-- 🔷 LEFT: DELTA CHARGER -->
-    <!-- ====================== -->
-
+    <!-- ================================================= -->
+    <!-- 🔷 LEFT : DELTA CHARGER -->
+    <!-- ================================================= -->
     <div class="card-block">
-        <h2 class="mb-3 d-flex align-items-center">
-            Delta 1kW Wireless Charger
-        </h2>
-        <h3>
-            <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
-            <small class="ms-2">
-                @(State.IsConnected ? "Connected" : "Disconnected")
-            </small>
-        </h3>
-        <h4>Electrical</h4>
-        <p><b>Voltage:</b> @(State.Voltage.ToString("F2")) V</p>
-        <p><b>Current:</b> @(State.Current.ToString("F2")) A</p>
-        <p><b>Power:</b> @State.Power: W</p>
+        <h2 class="mb-2">Delta 1kW Wireless Charger</h2>
 
-        <h4 class="mt-3">Wireless Parameters</h4>
+        <h4>
+            <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
+            <span class="ms-2">
+                @(State.IsConnected ? "Connected" : "Disconnected")
+            </span>
+        </h4>
+
+        <hr />
+
+        <h5>Electrical</h5>
+        <p><b>Voltage:</b> @State.Voltage.ToString("F2") V</p>
+        <p><b>Current:</b> @State.Current.ToString("F2") A</p>
+        <p><b>Power:</b> @(State.Power.ToString("F1")) W</p>
+
+        <h5 class="mt-3">Wireless</h5>
         <p><b>Gap:</b> @State.Gap mm</p>
         <p><b>Primary Temp:</b> @(State.PriTemp < 0 ? "???" : State.PriTemp + " °C")</p>
         <p><b>Secondary Temp:</b> @(State.SecTemp < 0 ? "???" : State.SecTemp + " °C")</p>
-        <div class="input-group input-group-sm mb-1">
-            <span class="input-group-text">current</span>
+
+        <hr />
+
+        <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text">Current (A)</span>
             <input type="number" class="form-control" @bind="current" />
-            <span class="input-group-text">voltage</span>
+            <span class="input-group-text">Voltage (V)</span>
             <input type="number" class="form-control" @bind="voltage" />
         </div>
-        <button class="btn btn-sm btn-primary" @onclick="SendOnceOn">Once On</button>
-        <button class="btn btn-sm btn-primary" @onclick="SendOnceOff">Once Off</button>
-        <button class="btn btn-sm btn-primary" @onclick="StartLoopOn">S On</button>
-        <button class="btn btn-sm btn-primary" @onclick="StartLoopOff">S Off</button>
+
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-success" @onclick="SendOnceOn">Once ON</button>
+            <button class="btn btn-secondary" @onclick="SendOnceOff">Once OFF</button>
+            <button class="btn btn-primary" @onclick="StartLoopOn">Start Loop</button>
+            <button class="btn btn-warning" @onclick="StartLoopOff">Stop Loop</button>
+        </div>
+
+        @if (State.FaultFlags.HasFlag(ChargerFault.ChargerLocked))
+        {
+            <div class="alert alert-danger mt-3 fw-bold">
+                🔒 Charger Locked
+                <button class="btn btn-sm btn-light ms-2"
+                        @onclick="ResetCharger">
+                    Reset
+                </button>
+            </div>
+        }
     </div>
 
-
-
+    <!-- ================================================= -->
+    <!-- 🔷 RIGHT : STATUS / FAULT / FW -->
+    <!-- ================================================= -->
     <div class="card-block">
-        @if (State.Status.Any())
+
+        @if (State.StatusFlags != ChargerStatus.None)
         {
-            <div class="alert alert-info mt-3">
-                <h4>Status</h4>
+            <div class="alert alert-info">
+                <h5>Status</h5>
                 <ul>
-                    @foreach (var s in State.Status)
+                    @foreach (var s in GetFlags(State.StatusFlags))
                     {
                         <li>@s</li>
                     }
                 </ul>
+
+                <div class="mt-2">
+                    @if (State.StatusFlags.HasFlag(ChargerStatus.CC_Mode))
+                    {
+                        <span class="badge bg-success">CC</span>
+                    }
+                    @if (State.StatusFlags.HasFlag(ChargerStatus.CV_Mode))
+                    {
+                        <span class="badge bg-warning text-dark">CV</span>
+                    }
+                    @if (State.StatusFlags.HasFlag(ChargerStatus.Thermal_Derating))
+                    {
+                        <span class="badge bg-warning text-dark">Thermal Derating</span>
+                    }
+                </div>
             </div>
         }
 
-        @if (State.Faults.Any())
+        @if (State.FaultFlags != ChargerFault.None)
         {
-            <div class="alert alert-danger mt-3">
-                <h4>Faults</h4>
+            <div class="alert alert-danger">
+                <h5>Faults</h5>
                 <ul>
-                    @foreach (var f in State.Faults)
+                    @foreach (var f in GetFlags(State.FaultFlags))
                     {
                         <li>@f</li>
                     }
@@ -117,7 +153,7 @@
         }
 
         <div class="card p-3 mt-3">
-            <h4>Firmware Versions</h4>
+            <h5>Firmware Versions</h5>
             <p><b>MCU1:</b> @State.RevMCU1</p>
             <p><b>MCU2:</b> @State.RevMCU2</p>
             <p><b>DSP:</b> @State.RevDSP</p>
@@ -128,54 +164,54 @@
 </div>
 
 @code {
+
     private Dictionary<string, double> data = new();
     private System.Threading.Timer? timer;
 
+    private double voltage = 55.0;
+    private double current = 5.0;
+
     protected override void OnInitialized()
     {
-        State.OnChange += () => InvokeAsync(StateHasChanged);
-
-        timer = new System.Threading.Timer(_ =>
-        {
-            data = BmuService.LastData ?? new Dictionary<string, double>();
-            InvokeAsync(StateHasChanged);
-        }, null, 0, 500);
+        State.OnChange += StateChanged;
     }
 
-    private string GetMeaning(string key, double value)
+    private void StateChanged() => InvokeAsync(StateHasChanged);
+
+    private IEnumerable<string> GetFlags(Enum flags)
     {
-        var map = new Dictionary<string, string>
+        foreach (Enum val in Enum.GetValues(flags.GetType()))
         {
-            { "Voltage", "Điện áp (V)" },
-            { "Current", "Dòng điện (A)" },
-            { "SOC", "Dung lượng còn lại (%)" },
-            { "Status", "Trạng thái pin (bit flag)" },
-            { "ChargeTime", "Thời gian sạc đầy (phút)" },
-            { "DischargeTime", "Thời gian xả hết (phút)" },
-            { "Temp", "Nhiệt độ (°C)" },
-            { "SOH", "Tình trạng pin (%)" },
-            { "RemainCapacity", "Dung lượng còn lại (Ah)" },
-            { "RemainEnergy", "Năng lượng còn lại (Wh)" }
-        };
-
-        return map.TryGetValue(key, out var meaning) ? meaning : "-";
+            if (Convert.ToUInt32(val) == 0) continue;
+            if (flags.HasFlag(val))
+                yield return val.ToString();
+        }
     }
-    double voltage;
-    double current;
+
     private void SendOnceOn() => dccs.SendOnce(voltage, current, true);
+
     private void SendOnceOff()
     {
         dccs.SendOnce(voltage, current, false);
         dccs.StopLoop();
     }
+
     private void StartLoopOn() => dccs.StartLoop(voltage, current, true);
-    private void StartLoopOff() 
+
+    private void StartLoopOff()
     {
-        dccs.StartLoop(voltage, current, false);
         dccs.StopLoop();
+        dccs.SendOnce(voltage, current, false);
     }
 
-    private async Task TryReconnect() => await BmuService.TryReconnectAsync();
+    private async Task ResetCharger()
+    {
+        await dccs.ResetFaultsAndStartAsync(voltage, current);
+    }
 
-    public void Dispose() => timer?.Dispose();
+    public void Dispose()
+    {
+        State.OnChange -= StateChanged;
+        timer?.Dispose();
+    }
 }

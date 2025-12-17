@@ -6,10 +6,6 @@ namespace RemoteCR.Services.Can;
 public class DeltaDecoder
 {
     private readonly CanStateContainer state;
-    private static readonly string[] stringArray = new[]
-        {
-            "Reserved_24","RX_Fault","Reserved_26","TX_Fault","EEPROM_Fault","Comm_Fault","Charger_Locked","Safety_Stop"
-        };
 
     public DeltaDecoder(CanStateContainer state)
     {
@@ -80,83 +76,105 @@ public class DeltaDecoder
     // --------------------------------------------------------------------
     private void Decode_5Fx(byte[] d)
     {
-        state.Faults.Clear();
+        state.FaultFlags = ChargerFault.None;
 
-        DecodeBits(d[0], new[]
-        {
-            "OVP","OCP","ShortCircuit","OTP_Primary","OTP_Secondary",
-            "OutputOpen","PolarityReverse","OutputDisabled"
-        });
-
-        DecodeBits(d[1], new[]
-        {
-            "AC_UV","AC_OV","AC_Freq","PhaseLoss","Surge","Ripple","EMI","Isolation"
-        });
-
-        DecodeBits(d[2], new[]
-        {
-            "GapTooHigh","MisalignmentHigh","ForeignObject","CommTimeout","Derating","TX_Fault","RX_Fault","RF_Fault"
-        });
-
-        DecodeBits(d[3], new[]
-        {
-            "BMS_NoCmd","BMS_Stop","ProfileErr","SafetyStop","InternalComm","EEPROM","SensorFault","ChargerLocked"
-        });
+        for (int i = 0; i < Math.Min(4, d.Length); i++)
+            state.FaultFlags |= (ChargerFault)(d[i] << (i * 8));
     }
+
 
     // --------------------------------------------------------------------
     // 77x – Status + Firmware (CHUẨN theo frame thật bạn gửi)
     // --------------------------------------------------------------------
     private void Decode_77x(byte[] d)
     {
-        state.Status.Clear();
+        state.StatusFlags = ChargerStatus.None;
 
-        // BYTE 0
-        DecodeStatusBits(d[0], new[]
+        int len = Math.Min(4, d.Length);
+        for (int i = 0; i < len; i++)
+            state.StatusFlags |= (ChargerStatus)(d[i] << (i * 8));
+
+        if (d.Length >= 7)
         {
-            "Input_OK","Charging_Enabled","CC_Mode","CV_Mode","Reserved_4","Reserved_5","Reserved_6","Reserved_7"
-        });
-
-        // BYTE 1
-        DecodeStatusBits(d[1],
-        [
-            "Misalignment_Warning","FOD_Warning","RF_Link_Warning","Thermal_Derating","Reserved_12","Reserved_13","Reserved_14","Reserved_15"
-        ]);
-
-        // BYTE 2
-        DecodeStatusBits(d[2],
-        [
-            "Reserved_16","Reserved_17","Reserved_18","Reserved_19","Reserved_20","Reserved_21","FOD_Active","Internal_Protection"
-        ]);
-
-        // BYTE 3
-        DecodeStatusBits(d[3], stringArray);
-
-        // Firmware revisions
-        state.RevMCU1 = d[4].ToString();
-        state.RevMCU2 = d[5].ToString();
-        state.RevDSP = d[6].ToString();
-
-        // Byte 7 = sequence counter (không lưu)
+            state.RevMCU1 = d[4].ToString();
+            state.RevMCU2 = d[5].ToString();
+            state.RevDSP = d[6].ToString();
+        }
     }
 
-    // --------------------------------------------------------------------
-    // Helper: Fault decode
-    // --------------------------------------------------------------------
-    private void DecodeBits(byte val, string[] labels)
-    {
-        for (int i = 0; i < 8; i++)
-            if ((val & (1 << i)) != 0)
-                state.Faults.Add(labels[i]);
-    }
-
-    // --------------------------------------------------------------------
-    // Helper: Status decode
-    // --------------------------------------------------------------------
-    private void DecodeStatusBits(byte val, string[] labels)
-    {
-        for (int i = 0; i < 8; i++)
-            if ((val & (1 << i)) != 0)
-                state.Status.Add(labels[i]);
-    }
 }
+[Flags]
+public enum ChargerFault : uint
+{
+    None = 0,
+
+    // -------- d[0] --------
+    OVP = 1 << 0,
+    OCP = 1 << 1,
+    ShortCircuit = 1 << 2,
+    OTP_Primary = 1 << 3,
+    OTP_Secondary = 1 << 4,
+    OutputOpen = 1 << 5,
+    PolarityReverse = 1 << 6,
+    OutputDisabled = 1 << 7,
+
+    // -------- d[1] --------
+    AC_UV = 1 << 8,
+    AC_OV = 1 << 9,
+    AC_Freq = 1 << 10,
+    PhaseLoss = 1 << 11,
+    Surge = 1 << 12,
+    Ripple = 1 << 13,
+    EMI = 1 << 14,
+    Isolation = 1 << 15,
+
+    // -------- d[2] --------
+    GapTooHigh = 1 << 16,
+    MisalignmentHigh = 1 << 17,
+    ForeignObject = 1 << 18,
+    CommTimeout = 1 << 19,
+    Derating = 1 << 20,
+    TX_Fault = 1 << 21,
+    RX_Fault = 1 << 22,
+    RF_Fault = 1 << 23,
+
+    // -------- d[3] --------
+    BMS_NoCmd = 1 << 24,
+    BMS_Stop = 1 << 25,
+    ProfileErr = 1 << 26,
+    SafetyStop = 1 << 27,
+    InternalComm = 1 << 28,
+    EEPROM = 1 << 29,
+    SensorFault = 1 << 30,
+    ChargerLocked = 1u << 31
+}
+[Flags]
+public enum ChargerStatus : uint
+{
+    None = 0,
+
+    // -------- BYTE 0 (0–7) --------
+    Input_OK = 1 << 0,
+    Charging_Enabled = 1 << 1,
+    CC_Mode = 1 << 2,
+    CV_Mode = 1 << 3,
+
+    // -------- BYTE 1 (8–15) --------
+    Misalignment_Warning = 1 << 8,
+    FOD_Warning = 1 << 9,
+    RF_Link_Warning = 1 << 10,
+    Thermal_Derating = 1 << 11,
+
+    // -------- BYTE 2 (16–23) --------
+    FOD_Active = 1 << 22,
+    Internal_Protection = 1 << 23,
+
+    // -------- BYTE 3 (24–31) --------
+    RX_Fault = 1 << 25,
+    TX_Fault = 1 << 27,
+    EEPROM_Fault = 1 << 29,
+    Comm_Fault = 1 << 30,
+    Charger_Locked = 1u << 31,
+    Safety_Stop = 1 << 24   // ✅ BỔ SUNG
+}
+

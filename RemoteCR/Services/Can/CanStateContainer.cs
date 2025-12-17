@@ -6,6 +6,8 @@ namespace RemoteCR.Services.Can;
 public class CanStateContainer
 {
     public bool IsConnected { get; set; }
+    public ChargerFault FaultFlags { get; set; } = ChargerFault.None;
+    public ChargerStatus StatusFlags { get; set; } = ChargerStatus.None;
 
     // ---- Output values ----
     public double Voltage { get; set; }
