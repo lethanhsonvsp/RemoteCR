@@ -108,11 +108,11 @@
         color: #0f0;
         font-family: monospace;
         font-size: .75rem;
-        padding: 6px;
+        padding: 4px 6px;      /* đều 2 bên */
         overflow-y: auto;
         border-radius: 6px;
+        text-align: left;      /* đảm bảo không bị inherit lệch */
     }
-
         .can-log.tx {
             color: #0ff;
             background: #0b1a1a;
@@ -120,7 +120,13 @@
 
     .can-line {
         white-space: pre;
+        text-align: left;      /* ép trái */
+        width: 100%;           /* chiếm full chiều ngang */
+        display: block;        /* không inline */
+        padding: 0;
+        margin: 0;
     }
+
 </style>
 
 <h3>Delta 1kW Wireless Charger</h3>
@@ -234,9 +240,7 @@
                     <div class="can-log">
                         @foreach (var f in RxFrames)
                         {
-                            <div class="can-line">
-                                can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex
-                            </div>
+                            <pre class="can-line">can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex</pre>
                         }
                     </div>
                 </div>
@@ -247,9 +251,7 @@
                     <div class="can-log tx">
                         @foreach (var f in TxFrames)
                         {
-                            <div class="can-line">
-                                can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex
-                            </div>
+                            <pre class="can-line">can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex</pre>
                         }
                     </div>
                 </div>
