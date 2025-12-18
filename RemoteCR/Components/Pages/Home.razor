@@ -25,11 +25,11 @@
             box-shadow: 0 0 8px #dc3545;
         }
 
-    /* ================= GRID 1x3 ================= */
+    /* ================= GRID ================= */
     .gui {
         display: grid;
-        grid-template-columns: 1fr 1fr 2fr;
-        gap: 12px;
+        grid-template-columns: 0.9fr 0.9fr 2.2fr; /* 👈 thu gọn cột 1,2 */
+        gap: 10px;
     }
 
     /* ================= CARD ================= */
@@ -43,44 +43,30 @@
 
     .title {
         font-weight: 600;
-        font-size: .95rem;
+        font-size: .9rem;
         margin-bottom: 6px;
     }
 
     /* ================= ROW ================= */
     .row {
         display: grid;
-        grid-template-columns: 140px 1fr;
+        grid-template-columns: 130px 1fr;
+        font-size: .8rem;
         align-items: center;
-        column-gap: 6px;
-        font-size: .85rem;
     }
-
-        .row span {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
 
         .row div {
             text-align: right;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
     /* ================= STATUS / FAULT ================= */
     .chk {
         display: grid;
         grid-template-columns: 16px 1fr;
-        column-gap: 6px;
+        font-size: .8rem;
         align-items: center;
-        font-size: .85rem;
     }
-
-        .chk input {
-            pointer-events: none;
-        }
 
     .on {
         color: #28a745;
@@ -98,41 +84,47 @@
     }
 
     .off {
-        color: #888;
+        color: #999;
     }
 
-    /* ================= CAN MONITOR ================= */
+    /* ================= CAN ================= */
     .can-filter {
         display: flex;
-        gap: 10px;
         flex-wrap: wrap;
-        font-size: .8rem;
+        gap: 8px;
+        font-size: .75rem;
         margin-bottom: 6px;
     }
 
-        .can-filter label {
-            cursor: pointer;
-            user-select: none;
-        }
+    .can-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
 
     .can-log {
-        height: 470px;
+        height: 420px;
         background: #111;
         color: #0f0;
         font-family: monospace;
-        font-size: .8rem;
-        padding: 8px;
+        font-size: .75rem;
+        padding: 6px;
         overflow-y: auto;
         border-radius: 6px;
     }
+
+        .can-log.tx {
+            color: #0ff;
+            background: #0b1a1a;
+        }
 
     .can-line {
         white-space: pre;
     }
 </style>
 
-<h2 class="mb-2">Delta 1kW Wireless Charger</h2>
-<h5 class="mb-3">
+<h3>Delta 1kW Wireless Charger</h3>
+<h5>
     <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
     @(State.IsConnected ? "Connected" : "Disconnected")
 </h5>
@@ -141,18 +133,17 @@
 
     <!-- ================= COLUMN 1 ================= -->
     <div>
-        <!-- Block 3 -->
         <div class="card">
             <div class="title">Set Point Control</div>
 
             <div class="row">
                 <span>Current (A)</span>
-                <div><input type="number" @bind="current" style="width:80px" /></div>
+                <div><input type="number" @bind="current" style="width:70px" /></div>
             </div>
 
             <div class="row">
                 <span>Voltage (V)</span>
-                <div><input type="number" @bind="voltage" style="width:80px" /></div>
+                <div><input type="number" @bind="voltage" style="width:70px" /></div>
             </div>
 
             <div class="mt-2">
@@ -163,11 +154,10 @@
             <div class="mt-1">
                 <button class="btn btn-primary btn-sm" @onclick="StartLoopOn">Start Loop</button>
                 <button class="btn btn-warning btn-sm ms-1" @onclick="StartLoopOff">Stop Loop</button>
-                <button class="btn btn-warning btn-sm ms-1" @onclick="Clear">ClearFault</button>
+                <button class="btn btn-danger btn-sm ms-1" @onclick="Clear">ClearFault</button>
             </div>
         </div>
 
-        <!-- Block 4 -->
         <div class="card">
             <div class="title">Measurements</div>
 
@@ -192,18 +182,14 @@
 
     <!-- ================= COLUMN 2 ================= -->
     <div>
-        <!-- Block 5 -->
         <div class="card">
             <div class="title">Status</div>
             @Chk("WirelessComm", State.GUI_WirelessComm)
             @Chk("StatusPower", State.GUI_StatusPower)
             @Chk("PowerDerating", State.GUI_PowerDerating, "warn")
             @Chk("Fault", State.GUI_Fault, "fault")
-            @Chk("Alert_AC", State.GUI_AlertAC, "warn")
-            @Chk("MemoryCorruption", State.GUI_MemoryCorruption, "fault")
         </div>
 
-        <!-- Block 6 -->
         <div class="card">
             <div class="title">Faults</div>
             @Fault("OCP_SW", ChargerFault.OCP)
@@ -226,11 +212,9 @@
 
     <!-- ================= COLUMN 3 ================= -->
     <div>
-        <!-- Block 8 : CAN Monitor -->
         <div class="card">
-            <div class="title">Output Measure (CAN Monitor)</div>
+            <div class="title">CAN Monitor</div>
 
-            <!-- FILTER -->
             <div class="can-filter">
                 @foreach (var id in KnownIds)
                 {
@@ -243,23 +227,32 @@
                 }
             </div>
 
-            <!-- LOG -->
-            <div class="can-log">
-                @foreach (var f in FilteredFrames)
-                {
-                    <div class="can-line">
-                        can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex
+            <div class="can-split">
+                <!-- RX -->
+                <div>
+                    <div class="title">RX</div>
+                    <div class="can-log">
+                        @foreach (var f in RxFrames)
+                        {
+                            <div class="can-line">
+                                can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex
+                            </div>
+                        }
                     </div>
-                }
-            </div>
-            <select class="form-select form-select-sm">
-                <option>100ms</option>
-                <option selected>500ms</option>
-                <option>1000ms</option>
-            </select>
-            <div class="form-check mt-1">
-                <input class="form-check-input" type="checkbox" />
-                <label class="form-check-label">Record</label>
+                </div>
+
+                <!-- TX -->
+                <div>
+                    <div class="title">TX</div>
+                    <div class="can-log tx">
+                        @foreach (var f in TxFrames)
+                        {
+                            <div class="can-line">
+                                can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex
+                            </div>
+                        }
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -270,7 +263,6 @@
     double voltage = 60;
     double current = 4;
 
-    // ===== STATUS / FAULT UI =====
     RenderFragment Chk(string t, bool v, string c = "on")
         => @<div class="chk @(v? c : "off")">
         <input type="checkbox" checked="@v" />@t
@@ -281,46 +273,25 @@
         <input type="checkbox" checked="@State.FaultFlags.HasFlag(f)" />@t
     </div>;
 
-    // ===== COMMAND =====
     void SendOnceOn() => dccs.SendOnce(voltage, current, true);
-
-    void SendOnceOff()
-    {
-        dccs.SendOnce(voltage, current, false);
-        dccs.StopLoop();
-    }
-
+    void SendOnceOff() { dccs.SendOnce(voltage, current, false); dccs.StopLoop(); }
     void StartLoopOn() => dccs.StartLoop(voltage, current, true);
-
-    void StartLoopOff()
-    {
-        dccs.StopLoop();
-        dccs.SendOnce(voltage, current, false);
-    }
-
+    void StartLoopOff() => dccs.StopLoop();
     void Clear() => dccs.Send190(voltage, current, true, true);
 
-    // ===== CAN MONITOR =====
-    HashSet<uint> EnabledIds = new()
-    {
-        0x311, 0x321, 0x771, 0x5F1
-    };
+    HashSet<uint> EnabledIds = new() { 0x311, 0x321, 0x771, 0x5F1, 0x190 };
 
-    uint[] KnownIds =
-    {
-        0x311, 0x321, 0x3C1, 0x3E1, 0x3F1,
-        0x521, 0x5F1, 0x771
-    };
+    uint[] KnownIds = { 0x190, 0x311, 0x321, 0x3C1, 0x3E1, 0x5F1, 0x771 };
 
-    IEnumerable<CanFrame> FilteredFrames =>
-        State.Frames
-             .Where(f => EnabledIds.Contains(f.Id & 0x7FF))
-             .TakeLast(150);
+    IEnumerable<CanFrame> RxFrames =>
+        State.Frames.Where(f => EnabledIds.Contains(f.Id & 0x7FF)).TakeLast(150);
+
+    IEnumerable<CanFrame> TxFrames =>
+        State.TxFrames.Where(f => EnabledIds.Contains(f.Id & 0x7FF)).TakeLast(150);
 
     void ToggleId(uint id, ChangeEventArgs e)
     {
-        bool on = (bool)e.Value!;
-        if (on) EnabledIds.Add(id);
+        if ((bool)e.Value!) EnabledIds.Add(id);
         else EnabledIds.Remove(id);
     }
 

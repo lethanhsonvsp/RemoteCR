@@ -21,6 +21,22 @@ public class CanStateContainer
 
         NotifyChanged();
     }
+    public List<CanFrame> TxFrames { get; } = new();
+
+    public void AddTxFrame(uint id, byte[] data)
+    {
+        TxFrames.Add(new CanFrame
+        {
+            Id = id,
+            Dlc = (byte)data.Length,
+            Data = data.ToArray()
+        });
+
+        if (TxFrames.Count > MaxFrames)
+            TxFrames.RemoveAt(0);
+
+        NotifyChanged();
+    }
 
     public bool IsConnected { get; set; }
 
