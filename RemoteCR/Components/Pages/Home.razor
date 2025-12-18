@@ -167,9 +167,9 @@
 
             <hr />
 
-            <div class="row"><span>AC Voltage</span><div>@State.AcVoltage V</div></div>
-            <div class="row"><span>AC Current</span><div>@State.AcCurrent A</div></div>
-            <div class="row"><span>AC Power</span><div>@State.AcPower W</div></div>
+            <div class="row"><span>AC Voltage</span><div>@State.AcVoltage.ToString("F1") V</div></div>
+            <div class="row"><span>AC Current</span><div>@State.AcCurrent.ToString("F1") A</div></div>
+            <div class="row"><span>AC Power</span><div>@State.AcPower.ToString("F1") W</div></div>
             <div class="row"><span>AC Freq</span><div>@State.AcFreq Hz</div></div>
 
             <hr />
@@ -284,10 +284,14 @@
     uint[] KnownIds = { 0x190, 0x311, 0x321, 0x3C1, 0x3E1, 0x5F1, 0x771 };
 
     IEnumerable<CanFrame> RxFrames =>
-        State.Frames.Where(f => EnabledIds.Contains(f.Id & 0x7FF)).TakeLast(150);
+        State.GetRxSnapshot()
+            .Where(f => EnabledIds.Contains(f.Id & 0x7FF))
+            .TakeLast(150);
 
     IEnumerable<CanFrame> TxFrames =>
-        State.TxFrames.Where(f => EnabledIds.Contains(f.Id & 0x7FF)).TakeLast(150);
+        State.GetTxSnapshot()
+            .Where(f => EnabledIds.Contains(f.Id & 0x7FF))
+            .TakeLast(150);
 
     void ToggleId(uint id, ChangeEventArgs e)
     {
@@ -296,8 +300,17 @@
     }
 
     protected override void OnInitialized()
-        => State.OnChange += StateHasChanged;
+    {
+        State.OnChange += OnStateChanged;
+    }
+
+    private void OnStateChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     public void Dispose()
-        => State.OnChange -= StateHasChanged;
+    {
+        State.OnChange -= OnStateChanged;
+    }
 }

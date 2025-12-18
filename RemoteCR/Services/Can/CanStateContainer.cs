@@ -1,80 +1,135 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RemoteCR.Services.Can;
 
 public class CanStateContainer
 {
-    public List<CanFrame> Frames { get; } = new();
+    // =====================================================
+    // INTERNAL LOCK (RẤT QUAN TRỌNG)
+    // =====================================================
+    private readonly object _lock = new();
+
+    // =====================================================
+    // CAN FRAMES
+    // =====================================================
+    private readonly List<CanFrame> _rxFrames = new();
+    private readonly List<CanFrame> _txFrames = new();
+
     public int MaxFrames { get; set; } = 200;
 
+    // =====================================================
+    // RX
+    // =====================================================
     public void AddFrame(uint id, byte dlc, byte[] data)
     {
-        Frames.Add(new CanFrame
+        lock (_lock)
         {
-            Id = id,
-            Dlc = dlc,
-            Data = data.ToArray()
-        });
+            _rxFrames.Add(new CanFrame
+            {
+                Id = id,
+                Dlc = dlc,
+                Data = data.ToArray()
+            });
 
-        if (Frames.Count > MaxFrames)
-            Frames.RemoveAt(0);
+            if (_rxFrames.Count > MaxFrames)
+                _rxFrames.RemoveAt(0);
+        }
 
         NotifyChanged();
     }
-    public List<CanFrame> TxFrames { get; } = new();
 
+    // =====================================================
+    // TX
+    // =====================================================
     public void AddTxFrame(uint id, byte[] data)
     {
-        TxFrames.Add(new CanFrame
+        lock (_lock)
         {
-            Id = id,
-            Dlc = (byte)data.Length,
-            Data = data.ToArray()
-        });
+            _txFrames.Add(new CanFrame
+            {
+                Id = id,
+                Dlc = (byte)data.Length,
+                Data = data.ToArray()
+            });
 
-        if (TxFrames.Count > MaxFrames)
-            TxFrames.RemoveAt(0);
+            if (_txFrames.Count > MaxFrames)
+                _txFrames.RemoveAt(0);
+        }
 
         NotifyChanged();
     }
 
+    // =====================================================
+    // SNAPSHOT APIs (UI CHỈ ĐƯỢC ĐỌC QUA ĐÂY)
+    // =====================================================
+    public IReadOnlyList<CanFrame> GetRxSnapshot()
+    {
+        lock (_lock)
+            return _rxFrames.ToList();
+    }
+
+    public IReadOnlyList<CanFrame> GetTxSnapshot()
+    {
+        lock (_lock)
+            return _txFrames.ToList();
+    }
+
+    // =====================================================
+    // CONNECTION
+    // =====================================================
     public bool IsConnected { get; set; }
 
-    // ===== OUTPUT =====
+    // =====================================================
+    // OUTPUT
+    // =====================================================
     public double Voltage { get; set; }
     public double Current { get; set; }
     public double Power => Voltage * Current;
 
-    // ===== WIRELESS =====
+    // =====================================================
+    // WIRELESS
+    // =====================================================
     public int Gap { get; set; }
     public int Misalignment { get; set; }
 
-    // ===== TEMP =====
+    // =====================================================
+    // TEMP
+    // =====================================================
     public int PriTemp { get; set; }
     public int SecTemp { get; set; }
 
-    // ===== AC INPUT =====
+    // =====================================================
+    // AC INPUT
+    // =====================================================
     public double AcVoltage { get; set; }
     public double AcCurrent { get; set; }
     public double AcPower { get; set; }
     public double AcFreq { get; set; }
 
-    // ===== RF =====
+    // =====================================================
+    // RF
+    // =====================================================
     public double Coupling { get; set; }
     public double RfPower { get; set; }
     public int Rssi { get; set; }
 
-    // ===== FLAGS =====
+    // =====================================================
+    // FLAGS
+    // =====================================================
     public ChargerStatus StatusFlags { get; set; }
     public ChargerFault FaultFlags { get; set; }
 
-    // ===== FW =====
+    // =====================================================
+    // FW
+    // =====================================================
     public string RevMCU1 { get; set; } = "";
     public string RevMCU2 { get; set; } = "";
     public string RevDSP { get; set; } = "";
 
     // =====================================================
-    // GUI STATUS (MAP THEO CAN MONITOR)
+    // GUI STATUS
     // =====================================================
     public bool GUI_WirelessComm
         => !StatusFlags.HasFlag(ChargerStatus.Comm_Fault);
@@ -96,7 +151,14 @@ public class CanStateContainer
     public bool GUI_MemoryCorruption
         => StatusFlags.HasFlag(ChargerStatus.EEPROM_Fault);
 
-    // ===== EVENT =====
+    // =====================================================
+    // EVENT
+    // =====================================================
     public event Action? OnChange;
-    public void NotifyChanged() => OnChange?.Invoke();
+
+    public void NotifyChanged()
+    {
+        // ❗ chỉ phát signal, KHÔNG render
+        OnChange?.Invoke();
+    }
 }
