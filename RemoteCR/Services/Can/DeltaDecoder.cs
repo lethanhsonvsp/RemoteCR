@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-
 namespace RemoteCR.Services.Can;
 
 public class DeltaDecoder
@@ -14,6 +12,8 @@ public class DeltaDecoder
 
     public void Decode(uint id, byte dlc, byte[] d)
     {
+        state.AddFrame(id, dlc, d);
+
         if (d == null || d.Length == 0 || dlc == 0)
             return;
 
@@ -21,88 +21,88 @@ public class DeltaDecoder
 
         switch (baseId)
         {
-            case 0x310:  // 311h — Voltage & Current
-                if (dlc >= 4) Decode_311(d);
-                break;
+            case 0x310: if (dlc >= 4) Decode_311(d); break;
+            case 0x320: if (dlc >= 2) Decode_321(d); break;
+            case 0x3C0: if (dlc >= 6) Decode_3C1(d); break;
+            case 0x3E0: if (dlc >= 2) Decode_3E1(d); break;
+            case 0x3F0: if (dlc >= 4) Decode_3F1(d); break;
 
-            case 0x320:  // 321h — Gap
-                if (dlc >= 1) Decode_321(d);
-                break;
+            case 0x520: if (dlc >= 2) Decode_521(d); break;
 
-            case 0x3E0:  // 3Ex — Temperatures
-                if (dlc >= 2) Decode_3Ex(d);
-                break;
-
-            case 0x5F0:  // 5Fx — Fault bits
-                if (dlc >= 4) Decode_5Fx(d);
-                break;
-
-            case 0x770:  // 77x — Status + Firmware
-                if (dlc >= 7) Decode_77x(d);
-                break;
+            case 0x5F0: if (dlc >= 4) Decode_5F1(d); break;
+            case 0x770: if (dlc >= 7) Decode_771(d); break;
         }
 
         state.NotifyChanged();
     }
 
-    // --------------------------------------------------------------------
-    // 311h – Voltage + Current
-    // --------------------------------------------------------------------
+    // ================= OUTPUT =================
     private void Decode_311(byte[] d)
     {
         state.Voltage = (d[0] | (d[1] << 8)) * 0.001;
         state.Current = (d[2] | (d[3] << 8)) * 0.001;
     }
 
-    // --------------------------------------------------------------------
-    // 321h – Gap (signed)
-    // --------------------------------------------------------------------
     private void Decode_321(byte[] d)
     {
         state.Gap = (sbyte)d[0];
+        state.Misalignment = (sbyte)d[1];
     }
 
-    // --------------------------------------------------------------------
-    // 3Ex – Temperature sensors (value - 40)
-    // --------------------------------------------------------------------
-    private void Decode_3Ex(byte[] d)
+    // ================= AC INPUT =================
+    private void Decode_3C1(byte[] d)
+    {
+        state.AcVoltage = (d[0] | (d[1] << 8)) * 0.1;
+        state.AcCurrent = (d[2] | (d[3] << 8)) * 0.01;
+        state.AcFreq = d[4];
+        state.AcPower = state.AcVoltage * state.AcCurrent;
+    }
+
+    // ================= TEMP =================
+    private void Decode_3E1(byte[] d)
     {
         state.PriTemp = d[0] - 40;
         state.SecTemp = d[1] - 40;
     }
 
-    // --------------------------------------------------------------------
-    // 5Fx – Fault bit groups
-    // --------------------------------------------------------------------
-    private void Decode_5Fx(byte[] d)
+    // ================= RF =================
+    private void Decode_3F1(byte[] d)
     {
-        state.FaultFlags = ChargerFault.None;
-
-        for (int i = 0; i < Math.Min(4, d.Length); i++)
-            state.FaultFlags |= (ChargerFault)(d[i] << (i * 8));
+        state.Coupling = (d[0] | (d[1] << 8)) * 0.1;
+        state.RfPower = (d[2] | (d[3] << 8)) * 0.1;
     }
 
+    private void Decode_521(byte[] d)
+    {
+        state.Rssi = (short)(d[0] | (d[1] << 8));
+    }
 
-    // --------------------------------------------------------------------
-    // 77x – Status + Firmware (CHUẨN theo frame thật bạn gửi)
-    // --------------------------------------------------------------------
-    private void Decode_77x(byte[] d)
+    // ================= FAULT (FIXED) =================
+    private void Decode_5F1(byte[] d)
+    {
+        state.FaultFlags =
+            (ChargerFault)(
+                (uint)d[0] |
+                ((uint)d[1] << 8) |
+                ((uint)d[2] << 16) |
+                ((uint)d[3] << 24)
+            );
+    }
+
+    // ================= STATUS + FW =================
+    private void Decode_771(byte[] d)
     {
         state.StatusFlags = ChargerStatus.None;
 
-        int len = Math.Min(4, d.Length);
-        for (int i = 0; i < len; i++)
+        for (int i = 0; i < 4; i++)
             state.StatusFlags |= (ChargerStatus)(d[i] << (i * 8));
 
-        if (d.Length >= 7)
-        {
-            state.RevMCU1 = d[4].ToString();
-            state.RevMCU2 = d[5].ToString();
-            state.RevDSP = d[6].ToString();
-        }
+        state.RevMCU1 = d[4].ToString();
+        state.RevMCU2 = d[5].ToString();
+        state.RevDSP = d[6].ToString();
     }
-
 }
+
 [Flags]
 public enum ChargerFault : uint
 {

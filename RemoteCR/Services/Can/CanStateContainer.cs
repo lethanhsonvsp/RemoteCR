@@ -1,42 +1,97 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace RemoteCR.Services.Can;
 
+public class CanFrame
+{
+    public uint Id { get; set; }
+    public byte Dlc { get; set; }
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+    public DateTime Ts { get; set; } = DateTime.Now;
+
+    public string Hex =>
+        BitConverter.ToString(Data).Replace("-", " ");
+}
+
 public class CanStateContainer
 {
-    public bool IsConnected { get; set; }
-    public ChargerFault FaultFlags { get; set; } = ChargerFault.None;
-    public ChargerStatus StatusFlags { get; set; } = ChargerStatus.None;
+    public List<CanFrame> Frames { get; } = new();
+    public int MaxFrames { get; set; } = 200;
 
-    // ---- Output values ----
+    public void AddFrame(uint id, byte dlc, byte[] data)
+    {
+        Frames.Add(new CanFrame
+        {
+            Id = id,
+            Dlc = dlc,
+            Data = data.ToArray()
+        });
+
+        if (Frames.Count > MaxFrames)
+            Frames.RemoveAt(0);
+
+        NotifyChanged();
+    }
+
+    public bool IsConnected { get; set; }
+
+    // ===== OUTPUT =====
     public double Voltage { get; set; }
     public double Current { get; set; }
     public double Power => Voltage * Current;
 
-    // ---- AC Input ----
+    // ===== WIRELESS =====
+    public int Gap { get; set; }
+    public int Misalignment { get; set; }
+
+    // ===== TEMP =====
+    public int PriTemp { get; set; }
+    public int SecTemp { get; set; }
+
+    // ===== AC INPUT =====
     public double AcVoltage { get; set; }
     public double AcCurrent { get; set; }
     public double AcPower { get; set; }
     public double AcFreq { get; set; }
 
-    // ---- Wireless charging gap + temps ----
-    public int Gap { get; set; }
-    public int PriTemp { get; set; }
-    public int SecTemp { get; set; }
+    // ===== RF =====
+    public double Coupling { get; set; }
+    public double RfPower { get; set; }
+    public int Rssi { get; set; }
 
-    // ---- Faults ----
-    public List<string> Faults { get; set; } = new();
+    // ===== FLAGS =====
+    public ChargerStatus StatusFlags { get; set; }
+    public ChargerFault FaultFlags { get; set; }
 
-    // ---- Status bits from message 0x77x ----
-    public HashSet<string> Status { get; set; } = new();
-
-    // ---- Firmware versions ----
+    // ===== FW =====
     public string RevMCU1 { get; set; } = "";
     public string RevMCU2 { get; set; } = "";
     public string RevDSP { get; set; } = "";
 
-    // ---- Event for Blazor UI ----
+    // =====================================================
+    // GUI STATUS (MAP THEO CAN MONITOR)
+    // =====================================================
+    public bool GUI_WirelessComm
+        => !StatusFlags.HasFlag(ChargerStatus.Comm_Fault);
+
+    public bool GUI_StatusPower
+        => StatusFlags.HasFlag(ChargerStatus.Input_OK);
+
+    public bool GUI_PowerDerating
+        => StatusFlags.HasFlag(ChargerStatus.Thermal_Derating);
+
+    public bool GUI_Fault
+        => FaultFlags != ChargerFault.None;
+
+    public bool GUI_AlertAC
+        => FaultFlags.HasFlag(ChargerFault.AC_UV)
+        || FaultFlags.HasFlag(ChargerFault.AC_OV)
+        || FaultFlags.HasFlag(ChargerFault.AC_Freq);
+
+    public bool GUI_MemoryCorruption
+        => StatusFlags.HasFlag(ChargerStatus.EEPROM_Fault);
+
+    // ===== EVENT =====
     public event Action? OnChange;
     public void NotifyChanged() => OnChange?.Invoke();
 }

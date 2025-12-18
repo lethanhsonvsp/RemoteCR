@@ -1,217 +1,343 @@
 ﻿@page "/"
 @rendermode InteractiveServer
-
-@using RemoteCR.Services.Modbus
 @using RemoteCR.Services.Can
-
-@inject TadaService BmuService
 @inject CanStateContainer State
 @inject DeltaChargerCommandService dccs
-
 @implements IDisposable
 
 <style>
+    /* ================= HEADER ================= */
     .status-dot {
         display: inline-block;
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        margin-left: 10px;
+        margin-right: 6px;
     }
 
         .status-dot.online {
-            background-color: #28a745;
+            background: #28a745;
             box-shadow: 0 0 8px #28a745;
         }
 
         .status-dot.offline {
-            background-color: #dc3545;
+            background: #dc3545;
             box-shadow: 0 0 8px #dc3545;
         }
 
-    .grid-container {
+    /* ================= GRID 1x3 ================= */
+    .gui {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
+        grid-template-columns: 1fr 1fr 2fr;
+        gap: 12px;
     }
 
-    @@media (max-width: 992px) {
-        .grid-container {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    .card-block {
-        padding: 20px;
+    /* ================= CARD ================= */
+    .card {
         background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 0 12px rgba(0,0,0,0.10);
+        border-radius: 8px;
+        padding: 10px 12px;
+        box-shadow: 0 0 8px rgba(0,0,0,.12);
+        margin-bottom: 10px;
+    }
+
+    .title {
+        font-weight: 600;
+        font-size: .95rem;
+        margin-bottom: 6px;
+    }
+
+    /* ================= ROW ================= */
+    .row {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        align-items: center;
+        column-gap: 6px;
+        font-size: .85rem;
+    }
+
+        .row span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .row div {
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    /* ================= STATUS / FAULT ================= */
+    .chk {
+        display: grid;
+        grid-template-columns: 16px 1fr;
+        column-gap: 6px;
+        align-items: center;
+        font-size: .85rem;
+    }
+
+        .chk input {
+            pointer-events: none;
+        }
+
+    .on {
+        color: #28a745;
+        font-weight: 600;
+    }
+
+    .warn {
+        color: #ffc107;
+        font-weight: 600;
+    }
+
+    .fault {
+        color: #dc3545;
+        font-weight: 600;
+    }
+
+    .off {
+        color: #888;
+    }
+
+    /* ================= CAN MONITOR ================= */
+    .can-filter {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        font-size: .8rem;
+        margin-bottom: 6px;
+    }
+
+        .can-filter label {
+            cursor: pointer;
+            user-select: none;
+        }
+
+    .can-log {
+        height: 470px;
+        background: #111;
+        color: #0f0;
+        font-family: monospace;
+        font-size: .8rem;
+        padding: 8px;
+        overflow-y: auto;
+        border-radius: 6px;
+    }
+
+    .can-line {
+        white-space: pre;
+    }
+
+    /* ================= RECORD ================= */
+    .record {
+        grid-column: 3;
+        width: 220px;
+        margin-left: auto;
     }
 </style>
 
-<h1 class="mb-4">🔋 Charger & Battery Dashboard</h1>
+<h2 class="mb-2">Delta 1kW Wireless Charger</h2>
+<h5 class="mb-3">
+    <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
+    @(State.IsConnected ? "Connected" : "Disconnected")
+</h5>
 
-<div class="grid-container">
+<div class="gui">
 
-    <!-- ================================================= -->
-    <!-- 🔷 LEFT : DELTA CHARGER -->
-    <!-- ================================================= -->
-    <div class="card-block">
-        <h2 class="mb-2">Delta 1kW Wireless Charger</h2>
+    <!-- ================= COLUMN 1 ================= -->
+    <div>
+        <!-- Block 3 -->
+        <div class="card">
+            <div class="title">Set Point Control</div>
 
-        <h4>
-            <span class="status-dot @(State.IsConnected ? "online" : "offline")"></span>
-            <span class="ms-2">
-                @(State.IsConnected ? "Connected" : "Disconnected")
-            </span>
-        </h4>
-
-        <hr />
-
-        <h5>Electrical</h5>
-        <p><b>Voltage:</b> @State.Voltage.ToString("F2") V</p>
-        <p><b>Current:</b> @State.Current.ToString("F2") A</p>
-        <p><b>Power:</b> @(State.Power.ToString("F1")) W</p>
-
-        <h5 class="mt-3">Wireless</h5>
-        <p><b>Gap:</b> @State.Gap mm</p>
-        <p><b>Primary Temp:</b> @(State.PriTemp < 0 ? "???" : State.PriTemp + " °C")</p>
-        <p><b>Secondary Temp:</b> @(State.SecTemp < 0 ? "???" : State.SecTemp + " °C")</p>
-
-        <hr />
-
-        <div class="input-group input-group-sm mb-2">
-            <span class="input-group-text">Current (A)</span>
-            <input type="number" class="form-control" @bind="current" />
-            <span class="input-group-text">Voltage (V)</span>
-            <input type="number" class="form-control" @bind="voltage" />
-        </div>
-
-        <div class="btn-group btn-group-sm">
-            <button class="btn btn-success" @onclick="SendOnceOn">Once ON</button>
-            <button class="btn btn-secondary" @onclick="SendOnceOff">Once OFF</button>
-            <button class="btn btn-primary" @onclick="StartLoopOn">Start Loop</button>
-            <button class="btn btn-warning" @onclick="StartLoopOff">Stop Loop</button>
-        </div>
-
-        @if (State.FaultFlags.HasFlag(ChargerFault.ChargerLocked))
-        {
-            <div class="alert alert-danger mt-3 fw-bold">
-                🔒 Charger Locked
-                <button class="btn btn-sm btn-light ms-2"
-                        @onclick="ResetCharger">
-                    Reset
-                </button>
+            <div class="row">
+                <span>Current (A)</span>
+                <div><input type="number" @bind="current" style="width:80px" /></div>
             </div>
-        }
+
+            <div class="row">
+                <span>Voltage (V)</span>
+                <div><input type="number" @bind="voltage" style="width:80px" /></div>
+            </div>
+
+            <div class="mt-2">
+                <button class="btn btn-success btn-sm" @onclick="SendOnceOn">Once ON</button>
+                <button class="btn btn-secondary btn-sm ms-1" @onclick="SendOnceOff">Once OFF</button>
+            </div>
+
+            <div class="mt-1">
+                <button class="btn btn-primary btn-sm" @onclick="StartLoopOn">Start Loop</button>
+                <button class="btn btn-warning btn-sm ms-1" @onclick="StartLoopOff">Stop Loop</button>
+                <button class="btn btn-warning btn-sm ms-1" @onclick="Clear">ClearFault</button>
+            </div>
+        </div>
+
+        <!-- Block 4 -->
+        <div class="card">
+            <div class="title">Measurements</div>
+
+            <div class="row"><span>Voltage</span><div>@State.Voltage.ToString("F1") V</div></div>
+            <div class="row"><span>Current</span><div>@State.Current.ToString("F1") A</div></div>
+            <div class="row"><span>Power</span><div>@State.Power.ToString("F1") W</div></div>
+
+            <hr />
+
+            <div class="row"><span>AC Voltage</span><div>@State.AcVoltage V</div></div>
+            <div class="row"><span>AC Current</span><div>@State.AcCurrent A</div></div>
+            <div class="row"><span>AC Power</span><div>@State.AcPower W</div></div>
+            <div class="row"><span>AC Freq</span><div>@State.AcFreq Hz</div></div>
+
+            <hr />
+
+            <div class="row"><span>Gap</span><div>@State.Gap mm</div></div>
+            <div class="row"><span>Temp Pri</span><div>@State.PriTemp °C</div></div>
+            <div class="row"><span>Temp Sec</span><div>@State.SecTemp °C</div></div>
+        </div>
     </div>
 
-    <!-- ================================================= -->
-    <!-- 🔷 RIGHT : STATUS / FAULT / FW -->
-    <!-- ================================================= -->
-    <div class="card-block">
-
-        @if (State.StatusFlags != ChargerStatus.None)
-        {
-            <div class="alert alert-info">
-                <h5>Status</h5>
-                <ul>
-                    @foreach (var s in GetFlags(State.StatusFlags))
-                    {
-                        <li>@s</li>
-                    }
-                </ul>
-
-                <div class="mt-2">
-                    @if (State.StatusFlags.HasFlag(ChargerStatus.CC_Mode))
-                    {
-                        <span class="badge bg-success">CC</span>
-                    }
-                    @if (State.StatusFlags.HasFlag(ChargerStatus.CV_Mode))
-                    {
-                        <span class="badge bg-warning text-dark">CV</span>
-                    }
-                    @if (State.StatusFlags.HasFlag(ChargerStatus.Thermal_Derating))
-                    {
-                        <span class="badge bg-warning text-dark">Thermal Derating</span>
-                    }
-                </div>
-            </div>
-        }
-
-        @if (State.FaultFlags != ChargerFault.None)
-        {
-            <div class="alert alert-danger">
-                <h5>Faults</h5>
-                <ul>
-                    @foreach (var f in GetFlags(State.FaultFlags))
-                    {
-                        <li>@f</li>
-                    }
-                </ul>
-            </div>
-        }
-
-        <div class="card p-3 mt-3">
-            <h5>Firmware Versions</h5>
-            <p><b>MCU1:</b> @State.RevMCU1</p>
-            <p><b>MCU2:</b> @State.RevMCU2</p>
-            <p><b>DSP:</b> @State.RevDSP</p>
+    <!-- ================= COLUMN 2 ================= -->
+    <div>
+        <!-- Block 5 -->
+        <div class="card">
+            <div class="title">Status</div>
+            @Chk("WirelessComm", State.GUI_WirelessComm)
+            @Chk("StatusPower", State.GUI_StatusPower)
+            @Chk("PowerDerating", State.GUI_PowerDerating, "warn")
+            @Chk("Fault", State.GUI_Fault, "fault")
+            @Chk("Alert_AC", State.GUI_AlertAC, "warn")
+            @Chk("MemoryCorruption", State.GUI_MemoryCorruption, "fault")
         </div>
 
+        <!-- Block 6 -->
+        <div class="card">
+            <div class="title">Faults</div>
+            @Fault("OCP_SW", ChargerFault.OCP)
+            @Fault("OTP_SW", ChargerFault.OTP_Primary)
+            @Fault("OVP_HW", ChargerFault.OVP)
+            @Fault("OVP_SW", ChargerFault.OVP)
+            @Fault("WD_Comm", ChargerFault.CommTimeout)
+            @Fault("WD_Reset", ChargerFault.SafetyStop)
+            @Fault("OverGap", ChargerFault.GapTooHigh, "warn")
+        </div>
+
+        <!-- Block 7 -->
+        <div class="card">
+            <div class="title">Version</div>
+            <div class="row"><span>SEC</span><div>@State.RevMCU1</div></div>
+            <div class="row"><span>IPT</span><div>@State.RevMCU2</div></div>
+            <div class="row"><span>PFC</span><div>@State.RevDSP</div></div>
+        </div>
+    </div>
+
+    <!-- ================= COLUMN 3 ================= -->
+    <div>
+        <!-- Block 8 : CAN Monitor -->
+        <div class="card">
+            <div class="title">Output Measure (CAN Monitor)</div>
+
+            <!-- FILTER -->
+            <div class="can-filter">
+                @foreach (var id in KnownIds)
+                {
+                    <label>
+                        <input type="checkbox"
+                               checked="@EnabledIds.Contains(id)"
+                               @onchange="e => ToggleId(id, e)" />
+                        @id.ToString("X3")
+                    </label>
+                }
+            </div>
+
+            <!-- LOG -->
+            <div class="can-log">
+                @foreach (var f in FilteredFrames)
+                {
+                    <div class="can-line">
+                        can0  @f.Id.ToString("X3")  [@f.Dlc]  @f.Hex
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= BLOCK 9 ================= -->
+    <div class="card record">
+        <select class="form-select form-select-sm">
+            <option>100ms</option>
+            <option selected>500ms</option>
+            <option>1000ms</option>
+        </select>
+        <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" />
+            <label class="form-check-label">Record</label>
+        </div>
     </div>
 
 </div>
 
 @code {
+    double voltage = 60;
+    double current = 4;
 
-    private Dictionary<string, double> data = new();
-    private System.Threading.Timer? timer;
+    // ===== STATUS / FAULT UI =====
+    RenderFragment Chk(string t, bool v, string c = "on")
+        => @<div class="chk @(v? c : "off")">
+        <input type="checkbox" checked="@v" />@t
+    </div>;
 
-    private double voltage = 55.0;
-    private double current = 5.0;
+    RenderFragment Fault(string t, ChargerFault f, string c = "fault")
+        => @<div class="chk @(State.FaultFlags.HasFlag(f) ? c : "off")">
+        <input type="checkbox" checked="@State.FaultFlags.HasFlag(f)" />@t
+    </div>;
+
+    // ===== COMMAND =====
+    void SendOnceOn() => dccs.SendOnce(voltage, current, true);
+
+    void SendOnceOff()
+    {
+        dccs.SendOnce(voltage, current, false);
+        dccs.StopLoop();
+    }
+
+    void StartLoopOn() => dccs.StartLoop(voltage, current, true);
+
+    void StartLoopOff()
+    {
+        dccs.StopLoop();
+        dccs.SendOnce(voltage, current, false);
+    }
+
+    void Clear() => dccs.Send190(voltage, current, true, true);
+
+    // ===== CAN MONITOR =====
+    HashSet<uint> EnabledIds = new()
+    {
+        0x311, 0x321, 0x771, 0x5F1
+    };
+
+    uint[] KnownIds =
+    {
+        0x311, 0x321, 0x3C1, 0x3E1, 0x3F1,
+        0x521, 0x5F1, 0x771
+    };
+
+    IEnumerable<CanFrame> FilteredFrames =>
+        State.Frames
+             .Where(f => EnabledIds.Contains(f.Id & 0x7FF))
+             .TakeLast(150);
+
+    void ToggleId(uint id, ChangeEventArgs e)
+    {
+        bool on = (bool)e.Value!;
+        if (on) EnabledIds.Add(id);
+        else EnabledIds.Remove(id);
+    }
 
     protected override void OnInitialized()
-    {
-        State.OnChange += StateChanged;
-    }
-
-    private void StateChanged() => InvokeAsync(StateHasChanged);
-
-    private IEnumerable<string> GetFlags(Enum flags)
-    {
-        foreach (Enum val in Enum.GetValues(flags.GetType()))
-        {
-            if (Convert.ToUInt32(val) == 0) continue;
-            if (flags.HasFlag(val))
-                yield return val.ToString();
-        }
-    }
-
-    private void SendOnceOn() => dccs.SendOnce(voltage, current, true);
-
-    private void SendOnceOff()
-    {
-        dccs.SendOnce(voltage, current, false);
-        dccs.StopLoop();
-    }
-
-    private void StartLoopOn() => dccs.StartLoop(voltage, current, true);
-
-    private void StartLoopOff()
-    {
-        dccs.StopLoop();
-        dccs.SendOnce(voltage, current, false);
-    }
-
-    private async Task ResetCharger()
-    {
-        await dccs.ResetFaultsAndStartAsync(voltage, current);
-    }
+        => State.OnChange += StateHasChanged;
 
     public void Dispose()
-    {
-        State.OnChange -= StateChanged;
-        timer?.Dispose();
-    }
+        => State.OnChange -= StateHasChanged;
 }
