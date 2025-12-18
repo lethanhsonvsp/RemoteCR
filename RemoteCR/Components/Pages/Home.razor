@@ -288,12 +288,14 @@
     IEnumerable<CanFrame> RxFrames =>
         State.GetRxSnapshot()
             .Where(f => EnabledIds.Contains(f.Id & 0x7FF))
-            .TakeLast(150);
+            .TakeLast(150)
+            .Reverse();   // 👈 MỚI NHẤT Ở TRÊN
 
     IEnumerable<CanFrame> TxFrames =>
         State.GetTxSnapshot()
             .Where(f => EnabledIds.Contains(f.Id & 0x7FF))
-            .TakeLast(150);
+            .TakeLast(150)
+            .Reverse();   // 👈 MỚI NHẤT Ở TRÊN
 
     void ToggleId(uint id, ChangeEventArgs e)
     {
