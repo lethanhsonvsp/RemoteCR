@@ -26,9 +26,7 @@ public class DeltaDecoder
             case 0x3C0: if (dlc >= 6) Decode_3C1(d); break;
             case 0x3E0: if (dlc >= 2) Decode_3E1(d); break;
             case 0x3F0: if (dlc >= 4) Decode_3F1(d); break;
-
             case 0x520: if (dlc >= 2) Decode_521(d); break;
-
             case 0x5F0: if (dlc >= 4) Decode_5F1(d); break;
             case 0x770: if (dlc >= 7) Decode_771(d); break;
         }
@@ -52,18 +50,37 @@ public class DeltaDecoder
     // ================= AC INPUT =================
     private void Decode_3C1(byte[] d)
     {
-        state.AcVoltage = (d[0] | (d[1] << 8)) * 0.1;
-        state.AcCurrent = (d[2] | (d[3] << 8)) * 0.01;
-        state.AcFreq = d[4];
+        ushort v = (ushort)(d[0] | (d[1] << 8));
+        ushort i = (ushort)(d[2] | (d[3] << 8));
+
+        state.AcVoltage = v * 0.01;
+        state.AcCurrent = i * 0.001;
+        state.AcFreq = d[5] * 0.4;
+
         state.AcPower = state.AcVoltage * state.AcCurrent;
     }
 
     // ================= TEMP =================
     private void Decode_3E1(byte[] d)
     {
-        state.PriTemp = d[0] - 40;
-        state.SecTemp = d[1] - 40;
+        state.PriTemp = DecodeTemp(d[0]);
+        state.SecTemp = DecodeTemp(d[1]);
     }
+
+    private static int DecodeTemp(byte raw)
+    {
+        if (raw == 0x00)
+            return int.MinValue; // hoặc dùng nullable
+
+        int temp = raw - 40;
+
+        // sanity check
+        if (temp < -20 || temp > 100)
+            return int.MinValue;
+
+        return temp;
+    }
+
 
     // ================= RF =================
     private void Decode_3F1(byte[] d)
