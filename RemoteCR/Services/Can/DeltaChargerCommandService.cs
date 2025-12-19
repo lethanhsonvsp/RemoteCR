@@ -16,7 +16,7 @@ public partial class DeltaChargerCommandService
     // =========================================================
     public DeltaChargerCommandService(
         SocketCan can,
-        ChargerVariant variant = ChargerVariant.V48   // ✅ default V48
+        ChargerVariant variant = ChargerVariant.V48
     )
     {
         _can = can;
@@ -26,7 +26,7 @@ public partial class DeltaChargerCommandService
     }
 
     // =========================================================
-    // Encode & Send CAN ID 0x190 (CORE)
+    // Encode & Send CAN ID 0x190 + x
     // =========================================================
     public void Send190(
         uint x,
@@ -37,7 +37,7 @@ public partial class DeltaChargerCommandService
     )
     {
         // ----------------------------
-        // Validate theo variant
+        // Variant limits
         // ----------------------------
         var (minV, maxV, maxI) = _variant switch
         {
@@ -48,38 +48,35 @@ public partial class DeltaChargerCommandService
 
         if (voltage < minV || voltage > maxV)
             throw new ArgumentException(
-                $"Voltage {voltage}V ngoài range {minV}-{maxV}V cho {_variant}");
+                $"Voltage {voltage}V out of range {minV}-{maxV}V");
 
         if (current < 0 || current > maxI)
             throw new ArgumentException(
-                $"Current {current}A ngoài range 0-{maxI}A cho {_variant}");
+                $"Current {current}A out of range 0-{maxI}A");
 
         // ----------------------------
-        // Demand_V (20-bit, factor 0.001)
+        // Demand Voltage (20-bit, 0.001V)
         // ----------------------------
-        int demandV = (int)(voltage * 1000);
+        int demandV = Math.Clamp((int)(voltage * 1000), 0, 0xFFFFF);
 
-        byte byte0 = (byte)((demandV >> 0) & 0xFF);
+        byte byte0 = (byte)(demandV & 0xFF);
         byte byte1 = (byte)((demandV >> 8) & 0xFF);
         byte byte2 = (byte)((demandV >> 16) & 0x0F);
 
-        // ----------------------------
-        // Control bits
-        // ----------------------------
         if (powerOn)
-            byte2 |= (1 << 4);   // bit20 PowerStage1
+            byte2 |= 1 << 4;   // PowerStage1 (bit20)
 
         if (clearFaults)
-            byte2 |= (1 << 5);   // bit21 ClearFaults
+            byte2 |= 1 << 5;   // ClearFaults (bit21)
 
         byte byte3 = 0x00;
 
         // ----------------------------
-        // Demand_I (18-bit, factor 0.001)
+        // Demand Current (18-bit, 0.001A)
         // ----------------------------
-        int demandI = (int)(current * 1000);
+        int demandI = Math.Clamp((int)(current * 1000), 0, 0x3FFFF);
 
-        byte byte4 = (byte)((demandI >> 0) & 0xFF);
+        byte byte4 = (byte)(demandI & 0xFF);
         byte byte5 = (byte)((demandI >> 8) & 0xFF);
         byte byte6 = (byte)((demandI >> 16) & 0x03);
         byte byte7 = 0x00;
@@ -90,14 +87,15 @@ public partial class DeltaChargerCommandService
             byte4, byte5, byte6, byte7
         };
 
+        uint canId = 0x190 + x;
+
         lock (_lockObj)
         {
-            uint idcan = 0x190 +x;
-            _can.Send(idcan, data);
+            _can.Send(canId, data);
         }
 
         Console.WriteLine(
-            $"➡ 0x190: {BitConverter.ToString(data).Replace("-", " ")} " +
+            $"➡ ID=0x{canId:X3}  {BitConverter.ToString(data).Replace("-", " ")} " +
             $"(V={voltage:F1}V I={current:F1}A {(powerOn ? "ON" : "OFF")})"
         );
     }
@@ -106,14 +104,12 @@ public partial class DeltaChargerCommandService
     // Send once
     // =========================================================
     public void SendOnce(uint x, double voltage, double current, bool on)
-    {
-        Send190(x, voltage, current, on);
-    }
+        => Send190(x, voltage, current, on);
 
     // =========================================================
-    // Watchdog loop (100 ms – Delta required)
+    // Watchdog loop (100 ms)
     // =========================================================
-    public void StartLoop(uint x,double voltage, double current, bool on)
+    public void StartLoop(uint x, double voltage, double current, bool on)
     {
         StopLoop();
 
@@ -123,22 +119,13 @@ public partial class DeltaChargerCommandService
         Task.Run(async () =>
         {
             Console.WriteLine(
-                $"🔄 Start 0x190 loop 100ms (V={voltage}V I={current}A ON={on})");
+                $"🔄 Start 0x{(0x190 + x):X3} loop 100ms (V={voltage} I={current} ON={on})");
 
             try
             {
                 while (!token.IsCancellationRequested)
                 {
-                    try
-                    {
-                        Send190(x, voltage, current, on);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"❌ 0x190 send failed: {ex.Message}");
-                        break; // ❗ stop loop if invalid
-                    }
-
+                    Send190(x, voltage, current, on);
                     await Task.Delay(100, token);
                 }
             }
@@ -146,38 +133,27 @@ public partial class DeltaChargerCommandService
             {
                 Console.WriteLine("⏹ Stop 0x190 loop");
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Watchdog error: {ex.Message}");
+            }
         }, token);
     }
 
     // =========================================================
-    // Stop watchdog loop
+    // Stop watchdog
     // =========================================================
     public void StopLoop()
     {
-        if (_loopCts != null)
-        {
-            _loopCts.Cancel();
-            _loopCts.Dispose();
-            _loopCts = null;
-        }
+        if (_loopCts == null) return;
+
+        _loopCts.Cancel();
+        _loopCts.Dispose();
+        _loopCts = null;
     }
 
     // =========================================================
-    // Turn OFF charger (Delta-safe)
-    // =========================================================
-    //public void TurnOff()
-    //{
-    //    double nominalV = _variant == ChargerVariant.V48 ? 48.0 : 24.0;
-
-    //    Send190(nominalV, 0, false);
-    //    Thread.Sleep(120);
-    //    Send190(nominalV, 0, false);
-
-    //    Console.WriteLine("🔴 Charger OFF");
-    //}
-
-    // =========================================================
-    // Reset faults & restart charging (CHUẨN DELTA)
+    // Reset faults & restart (Delta standard sequence)
     // =========================================================
     public async Task ResetFaultsAndStartAsync(
         uint x,
@@ -193,16 +169,16 @@ public partial class DeltaChargerCommandService
         Send190(x, nominalV, 0, false);
         await Task.Delay(300);
 
-        // STEP 2: ClearFaults (OFF)
-        Send190(x,voltage, current, false, clearFaults: true);
+        // STEP 2: Clear faults (OFF)
+        Send190(x, voltage, current, false, clearFaults: true);
         await Task.Delay(300);
 
         // STEP 3: ON + ClearFaults
         Send190(x, voltage, current, true, clearFaults: true);
         await Task.Delay(300);
 
-        // STEP 4: Normal ON + watchdog
-        StartLoop(x,voltage, current, true);
+        // STEP 4: Normal watchdog
+        StartLoop(x, voltage, current, true);
 
         Console.WriteLine("✅ Reset sequence done");
     }
