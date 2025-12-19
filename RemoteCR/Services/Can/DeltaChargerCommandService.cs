@@ -64,7 +64,10 @@ public partial class DeltaChargerCommandService
         byte byte2 = (byte)((demandV >> 16) & 0x0F);
 
         if (powerOn)
+        {
             byte2 |= 1 << 4;   // PowerStage1 (bit20)
+            byte2 |= 1 << 7;   // PowerStage2 (bit23) ✅ FIX
+        }
 
         if (clearFaults)
             byte2 |= 1 << 5;   // ClearFaults (bit21)
@@ -139,6 +142,43 @@ public partial class DeltaChargerCommandService
             }
         }, token);
     }
+    // =========================================================
+    // Acquire CAN Control (RESET MODE – CÁCH 3)
+    // =========================================================
+    public async Task AcquireCanControlAsync(
+        uint x,
+        double voltage,
+        double current
+    )
+    {
+        Console.WriteLine("🔓 Acquire CAN control (RESET MODE)");
+
+        // ----------------------------
+        // STEP 1: HARD RESET MODE
+        // PowerStage = 0, V = 0, I = 0
+        // ----------------------------
+        Send190(x, 0, 0, false);
+        await Task.Delay(1500); // ⏱ bắt buộc ≥ 1s (Delta spec)
+
+        // ----------------------------
+        // STEP 2: OFF nhưng V hợp lệ
+        // ----------------------------
+        Send190(x, voltage, 0, false);
+        await Task.Delay(300);
+
+        // ----------------------------
+        // STEP 3: ON – chiếm quyền CAN
+        // ----------------------------
+        Send190(x, voltage, current, true);
+        await Task.Delay(300);
+
+        // ----------------------------
+        // STEP 4: Watchdog
+        // ----------------------------
+        StartLoop(x, voltage, current, true);
+
+        Console.WriteLine("✅ CAN control acquired");
+    }
 
     // =========================================================
     // Stop watchdog
@@ -152,34 +192,15 @@ public partial class DeltaChargerCommandService
         _loopCts = null;
     }
 
-    // =========================================================
-    // Reset faults & restart (Delta standard sequence)
-    // =========================================================
-    public async Task ResetFaultsAndStartAsync(
-        uint x,
-        double voltage,
-        double current
-    )
+    public async Task ResetFaultsAsync(uint x)
     {
-        Console.WriteLine("🧹 Reset charger faults");
+        Console.WriteLine("🧹 Clear charger faults");
 
-        double nominalV = _variant == ChargerVariant.V48 ? 48.0 : 24.0;
-
-        // STEP 1: OFF
-        Send190(x, nominalV, 0, false);
+        // OFF + ClearFault
+        Send190(x, 0, 0, false, clearFaults: true);
         await Task.Delay(300);
 
-        // STEP 2: Clear faults (OFF)
-        Send190(x, voltage, current, false, clearFaults: true);
-        await Task.Delay(300);
-
-        // STEP 3: ON + ClearFaults
-        Send190(x, voltage, current, true, clearFaults: true);
-        await Task.Delay(300);
-
-        // STEP 4: Normal watchdog
-        StartLoop(x, voltage, current, true);
-
-        Console.WriteLine("✅ Reset sequence done");
+        Console.WriteLine("✅ Fault clear done");
     }
+
 }

@@ -164,6 +164,7 @@
 
             <div class="mt-1">
                 <button class="btn btn-primary btn-sm" @onclick="StartLoopOn">Start Loop</button>
+                <button class="btn btn-primary btn-sm" @onclick="AcquireCanControlAsync">AcquireCanControlAsync</button>
                 <button class="btn btn-warning btn-sm ms-1" @onclick="StartLoopOff">Stop Loop</button>
                 <button class="btn btn-danger btn-sm ms-1" @onclick="Clear">ClearFault</button>
             </div>
@@ -267,9 +268,9 @@
 </div>
 
 @code {
-    double voltage = 60;
-    double current = 4;
-    uint x;
+    double voltage = 55;
+    double current = 10;
+    uint x = 1;
 
     RenderFragment Chk(string t, bool v, string c = "on")
         => @<div class="chk @(v? c : "off")">
@@ -284,10 +285,11 @@
     void SendOnceOn() => dccs.SendOnce(x,voltage, current, true);
     void SendOnceOff() { dccs.SendOnce(x, voltage, current, false); dccs.StopLoop(); }
     void StartLoopOn() => dccs.StartLoop(x, voltage, current, true);
+    void AcquireCanControlAsync() => dccs.AcquireCanControlAsync(x, voltage, current);
     void StartLoopOff() => dccs.StopLoop();
     void Clear() => dccs.Send190(x,voltage, current, true, true);
 
-    HashSet<uint> EnabledIds = new() { 0x311, 0x321, 0x771, 0x5F1, 0x190 };
+    HashSet<uint> EnabledIds = new() { 0x311 };
 
     uint[] KnownIds = { 0x190, 0x311, 0x321, 0x3C1, 0x3E1, 0x5F1, 0x771 };
 
