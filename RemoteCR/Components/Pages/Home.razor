@@ -152,6 +152,11 @@
                 <div><input type="number" @bind="voltage" style="width:70px" /></div>
             </div>
 
+            <div class="row">
+                <span>X</span>
+                <div><input type="number" @bind="x" style="width:70px" /></div>
+            </div>
+
             <div class="mt-2">
                 <button class="btn btn-success btn-sm" @onclick="SendOnceOn">Once ON</button>
                 <button class="btn btn-secondary btn-sm ms-1" @onclick="SendOnceOff">Once OFF</button>
@@ -264,6 +269,7 @@
 @code {
     double voltage = 60;
     double current = 4;
+    uint x;
 
     RenderFragment Chk(string t, bool v, string c = "on")
         => @<div class="chk @(v? c : "off")">
@@ -275,11 +281,11 @@
         <input type="checkbox" checked="@State.FaultFlags.HasFlag(f)" />@t
     </div>;
 
-    void SendOnceOn() => dccs.SendOnce(voltage, current, true);
-    void SendOnceOff() { dccs.SendOnce(voltage, current, false); dccs.StopLoop(); }
-    void StartLoopOn() => dccs.StartLoop(voltage, current, true);
+    void SendOnceOn() => dccs.SendOnce(x,voltage, current, true);
+    void SendOnceOff() { dccs.SendOnce(x, voltage, current, false); dccs.StopLoop(); }
+    void StartLoopOn() => dccs.StartLoop(x, voltage, current, true);
     void StartLoopOff() => dccs.StopLoop();
-    void Clear() => dccs.Send190(voltage, current, true, true);
+    void Clear() => dccs.Send190(x,voltage, current, true, true);
 
     HashSet<uint> EnabledIds = new() { 0x311, 0x321, 0x771, 0x5F1, 0x190 };
 
