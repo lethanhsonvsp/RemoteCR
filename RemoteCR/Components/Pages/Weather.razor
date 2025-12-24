@@ -9,22 +9,22 @@
 
 <style>
     .status-dot {
-        display: inline-block;
         width: 14px;
         height: 14px;
         border-radius: 50%;
+        display: inline-block;
         margin-right: 6px;
     }
 
-        .status-dot.online {
-            background: #28a745;
-            box-shadow: 0 0 8px #28a745;
-        }
+    .online {
+        background: #28a745;
+        box-shadow: 0 0 8px #28a745;
+    }
 
-        .status-dot.offline {
-            background: #dc3545;
-            box-shadow: 0 0 8px #dc3545;
-        }
+    .offline {
+        background: #dc3545;
+        box-shadow: 0 0 8px #dc3545;
+    }
 
     .gui {
         display: grid;
@@ -61,9 +61,8 @@
     .chk {
         display: grid;
         grid-template-columns: 16px 1fr;
-        font-size: .8rem;
-        align-items: center;
         gap: 6px;
+        font-size: .8rem;
     }
 
     .on {
@@ -84,27 +83,6 @@
     .off {
         color: #999;
     }
-
-    .label {
-        position: relative;
-        cursor: help;
-        border-bottom: 1px dotted #aaa;
-    }
-
-        .label:hover::after {
-            content: attr(data-desc);
-            position: absolute;
-            left: 0;
-            top: 120%;
-            background: #333;
-            color: #fff;
-            padding: 6px 8px;
-            font-size: .75rem;
-            border-radius: 4px;
-            white-space: nowrap;
-            z-index: 100;
-            box-shadow: 0 2px 8px rgba(0,0,0,.25);
-        }
 </style>
 
 <h3>⚡ Wireless Charger Dashboard</h3>
@@ -116,44 +94,49 @@
 
 <div class="gui">
 
-    <!-- ===== COLUMN 1 ===== -->
+    <!-- ================= COLUMN 1 ================= -->
     <div>
+
+        <!-- ===== SET POINT ===== -->
         <div class="card">
             <div class="title">Set Point Control</div>
 
             <div class="row">
-                <span class="label" data-desc="Điện áp DC yêu cầu (CAN 0x191)">
-                    Voltage (V)
-                </span>
+                <span>Voltage (V)</span>
                 <div>
                     <input type="number" step="0.5"
-                           disabled="@(!IsConnected)"
-                           @onchange="OnVoltageChanged"
                            value="@SetVoltage"
+                           @onchange="e => SetVoltage = double.Parse(e.Value!.ToString()!)"
                            style="width:80px" />
                 </div>
             </div>
 
             <div class="row">
-                <span class="label" data-desc="Dòng DC giới hạn (CAN 0x191)">
-                    Current (A)
-                </span>
+                <span>Current (A)</span>
                 <div>
                     <input type="number" step="0.5"
-                           disabled="@(!IsConnected)"
-                           @onchange="OnCurrentChanged"
                            value="@SetCurrent"
+                           @onchange="e => SetCurrent = double.Parse(e.Value!.ToString()!)"
                            style="width:80px" />
                 </div>
             </div>
 
-            <div style="margin-top:6px">
-                <button disabled="@(!IsConnected)" @onclick="PowerOn">Power ON</button>
-                <button disabled="@(!IsConnected)" @onclick="PowerOff">Power OFF</button>
-                <button disabled="@(!IsConnected)" @onclick="ClearFault">Clear Fault</button>
+            <div class="mt-2">
+                <button @onclick="PowerOn" disabled="@(!CanPowerOn || PowerEnable)">
+                    Power ON
+                </button>
+
+                <button @onclick="PowerOff" disabled="@(!PowerEnable)">
+                    Power OFF
+                </button>
+
+                <button @onclick="ClearFault" disabled="@(!IsConnected)">
+                    Clear Fault
+                </button>
             </div>
         </div>
 
+        <!-- ===== MEASUREMENTS + AC ===== -->
         <div class="card">
             <div class="title">Measurements</div>
 
@@ -162,75 +145,131 @@
                 <div>@Fmt(Reader.Model?.Voltage_V) V</div>
             </div>
 
-            <div class="row @(HasData ? "on" : "off")">
+            <div class="row @(Reader.Model?.Current_A > 0.1 ? "on" : "off")">
                 <span>Current</span>
                 <div>@Fmt(Reader.Model?.Current_A) A</div>
             </div>
 
-            <div class="row @(HasData ? "on" : "off")">
+            <div class="row">
                 <span>Power</span>
                 <div>@Fmt(Power) W</div>
             </div>
+
+            <hr />
+
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")">
+                <span>AC Voltage</span>
+                <div>@Fmt(Reader.Model?.Ac?.Voltage_V) V</div>
+            </div>
+
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")">
+                <span>AC Current</span>
+                <div>@Fmt(Reader.Model?.Ac?.Current_A) A</div>
+            </div>
+
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")">
+                <span>AC Freq</span>
+                <div>@Fmt(Reader.Model?.Ac?.Frequency_Hz) Hz</div>
+            </div>
         </div>
+
+        <!-- ===== GAP & TEMP ===== -->
+        <div class="card">
+            <div class="title">Gap & Temperature</div>
+
+            <div class="row @GapClass"><span>Gap</span><div>@Fmt(Reader.Model?.Wireless?.Gap_mm) mm</div></div>
+            <div class="row @TempPriClass"><span>Temp Primary</span><div>@Fmt(Reader.Model?.Temperature?.Primary_C) °C</div></div>
+            <div class="row @TempSecClass"><span>Temp Secondary</span><div>@Fmt(Reader.Model?.Temperature?.Secondary_C) °C</div></div>
+        </div>
+
     </div>
 
-    <!-- ===== COLUMN 2 ===== -->
+    <!-- ================= COLUMN 2 ================= -->
     <div>
+
         <div class="card">
             <div class="title">Status & Fault</div>
 
-            @BoolState("Charging", Reader.Model?.Charging, "Đang truyền năng lượng")
-            @FaultState("Fault", Reader.Model?.Fault == true, "Lỗi hệ thống tổng")
-            @FaultState("OCP", Reader.Model?.Status?.Ocp == true, "Quá dòng")
-            @FaultState("OVP", Reader.Model?.Status?.Ovp == true, "Quá áp")
-            @FaultState("Watchdog", Reader.Model?.Status?.Watchdog == true, "Watchdog reset")
+            @BoolState("AC Present", Reader.Model?.Ac != null)
+            @BoolState("Charging", IsCharging)
+            @BoolState("Wireless OK", Reader.Model?.WirelessStatusReport?.WirelessOk == true)
+
+            @FaultState("Fault", Reader.Model?.Fault == true)
+            @FaultState("OCP", Reader.Model?.Status?.Ocp == true)
+            @FaultState("OVP", Reader.Model?.Status?.Ovp == true)
+            @FaultState("Watchdog", Reader.Model?.Status?.Watchdog == true)
         </div>
+
+        <div class="card">
+            <div class="title">Charging Checklist</div>
+
+            <div class="row @(SetCurrent > 0 ? "on" : "fault")">
+                <span>Demand Current</span>
+                <div>@SetCurrent A</div>
+            </div>
+
+            <div class="row @(Reader.Model?.Wireless?.Gap_mm <= 12 ? "on" : "fault")">
+                <span>Gap</span>
+                <div>@Fmt(Reader.Model?.Wireless?.Gap_mm) mm</div>
+            </div>
+
+            <div class="row @(Reader.Model?.WirelessStatusReport?.WirelessOk == true ? "on" : "fault")">
+                <span>Wireless OK</span>
+                <div>@(Reader.Model?.WirelessStatusReport?.WirelessOk == true ? "YES" : "NO")</div>
+            </div>
+
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "fault")">
+                <span>AC</span>
+                <div>@(Reader.Model?.Ac != null ? "OK" : "NO")</div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- ===== COLUMN 3 ===== -->
+    <!-- ================= COLUMN 3 ================= -->
     <div>
+
         <div class="card">
             <div class="title">Wireless Communication</div>
 
-            <div class="row">
-                <span>Channel</span>
-                <div>@Reader.Model?.CommInfo?.Channel</div>
-            </div>
-
-            <div class="row">
-                <span>Comm ID</span>
-                <div>@Reader.Model?.CommInfo?.CommId</div>
-            </div>
-
+            <div class="row"><span>Channel</span><div>@Reader.Model?.CommInfo?.Channel</div></div>
+            <div class="row"><span>Comm ID</span><div>@Reader.Model?.CommInfo?.CommId</div></div>
             <div class="row @CommQualityClass">
                 <span>Success Rate</span>
                 <div>@FmtPct(Reader.Model?.CommInfo?.SuccessRate)</div>
             </div>
         </div>
+
     </div>
 </div>
 
 @code {
-    // ===== STATE =====
-    bool IsConnected => Can.IsConnected;
-    bool HasData => Reader.Model != null;
-    double Power => (Reader.Model?.Voltage_V ?? 0) * (Reader.Model?.Current_A ?? 0);
-
-    // ===== SETPOINT =====
-    double SetVoltage = 50;
+    // ===== UI BUFFER =====
+    double SetVoltage = 54;
     double SetCurrent = 10;
 
-    // 🔴 MASTER ENABLE (BIT 20)
     bool PowerEnable = false;
+
+    bool IsConnected => Can.IsConnected;
+    bool HasData => Reader.Model != null;
+    bool IsCharging => Reader.Model?.Charging == true;
+    double Power => (Reader.Model?.Voltage_V ?? 0) * (Reader.Model?.Current_A ?? 0);
+
+    bool CanPowerOn =>
+        IsConnected &&
+        SetCurrent > 0 &&
+        Reader.Model?.WirelessStatusReport?.WirelessOk == true &&
+        Reader.Model?.Wireless?.Gap_mm <= 12 &&
+        Reader.Model?.Ac != null;
 
     protected override void OnInitialized()
     {
+        // đảm bảo trạng thái idle an toàn
         Writer.Update(cmd =>
         {
-            cmd.DemandVoltage_V = SetVoltage;
-            cmd.DemandCurrent_A = SetCurrent;
             cmd.PowerEnable = false;
             cmd.PowerStage1 = false;
+            cmd.DemandCurrent_A = 0;
         });
 
         Reader.OnChange += Refresh;
@@ -239,75 +278,30 @@
     void Refresh() => InvokeAsync(StateHasChanged);
     public void Dispose() => Reader.OnChange -= Refresh;
 
-    // ===== UI HELPERS =====
-    RenderFragment BoolState(string t, bool? v, string desc)
-        => @<div class="chk @(v == true ? "on" : "off")">
-        <input type="checkbox" checked="@(v == true)" disabled />
-        <span class="label" data-desc="@desc">@t</span>
-    </div>;
-
-    RenderFragment FaultState(string t, bool f, string desc)
-        => @<div class="chk @(f ? "fault" : "off")">
-        <input type="checkbox" checked="@f" disabled />
-        <span class="label" data-desc="@desc">@t</span>
-    </div>;
-
-    string CommQualityClass => Reader.Model?.CommInfo?.SuccessRate switch
-    {
-        null => "off",
-        < 0.90 => "fault",
-        < 0.97 => "warn",
-        _ => "on"
-    };
-
-    string Fmt(double? v) => v.HasValue ? v.Value.ToString("F1") : "--";
-    string FmtPct(double? v) => v.HasValue ? (v.Value * 100).ToString("F1") + " %" : "--";
-
-    // ===== SETPOINT CHANGE =====
-    void OnVoltageChanged(ChangeEventArgs e)
-    {
-        if (double.TryParse(e.Value?.ToString(), out var v))
-        {
-            SetVoltage = v;
-            Writer.Update(cmd =>
-            {
-                cmd.DemandVoltage_V = v;
-                cmd.PowerEnable = PowerEnable;
-            });
-        }
-    }
-
-    void OnCurrentChanged(ChangeEventArgs e)
-    {
-        if (double.TryParse(e.Value?.ToString(), out var a))
-        {
-            SetCurrent = a;
-            Writer.Update(cmd =>
-            {
-                cmd.DemandCurrent_A = a;
-                cmd.PowerEnable = PowerEnable;
-            });
-        }
-    }
-
-    // ===== COMMANDS =====
     async Task PowerOn()
     {
+        if (!CanPowerOn)
+            return;
+
         PowerEnable = true;
 
+        // STEP 1: clear fault
         Writer.Update(cmd =>
         {
-            cmd.PowerEnable = true;
             cmd.ClearFaults = true;
+            cmd.PowerEnable = false;
             cmd.PowerStage1 = false;
         });
 
         await Task.Delay(300);
 
+        // STEP 2: enable power with UI V/I
         Writer.Update(cmd =>
         {
             cmd.ClearFaults = false;
-            cmd.PowerEnable = true;
+            cmd.DemandVoltage_V = SetVoltage;
+            cmd.DemandCurrent_A = SetCurrent;
+            cmd.PowerEnable = true;     // bit 20
             cmd.PowerStage1 = true;
         });
     }
@@ -320,8 +314,7 @@
         {
             cmd.PowerEnable = false;
             cmd.PowerStage1 = false;
-            for (int i = 0; i < cmd.PowerStages.Length; i++)
-                cmd.PowerStages[i] = false;
+            cmd.DemandCurrent_A = 0; // an toàn
         });
     }
 
@@ -331,4 +324,52 @@
         await Task.Delay(200);
         Writer.Update(cmd => cmd.ClearFaults = false);
     }
+
+    RenderFragment BoolState(string t, bool v)
+        => @<div class="chk @(v ? "on" : "off")">
+        <input type="checkbox" checked="@v" disabled />
+        <span>@t</span>
+    </div>;
+
+    RenderFragment FaultState(string t, bool f)
+        => @<div class="chk @(f ? "fault" : "off")">
+        <input type="checkbox" checked="@f" disabled />
+        <span>@t</span>
+    </div>
+    ;
+
+    string GapClass => Reader.Model?.Wireless?.Gap_mm switch
+    {
+        null => "off",
+        > 20 => "fault",
+        > 12 => "warn",
+        _ => "on"
+    };
+
+    string TempPriClass => Reader.Model?.Temperature?.Primary_C switch
+    {
+        null => "off",
+        > 90 => "fault",
+        > 75 => "warn",
+        _ => "on"
+    };
+
+    string TempSecClass => Reader.Model?.Temperature?.Secondary_C switch
+    {
+        null => "off",
+        > 90 => "fault",
+        > 75 => "warn",
+        _ => "on"
+    };
+
+    string CommQualityClass => Reader.Model?.CommInfo?.SuccessRate switch
+    {
+        null => "off",
+        < 0.90 => "fault",
+        < 0.97 => "warn",
+        _ => "on"
+    };
+
+    string Fmt(double? v) => v.HasValue ? v.Value.ToString("F1") : "--";
+    string FmtPct(double? v) => v.HasValue ? (v.Value * 100).ToString("F1") : " %";
 }
