@@ -130,122 +130,78 @@
             </div>
         </div>
 
-        <!-- Measurements -->
+        <!-- Measurements (VALUE) -->
         <div class="card">
             <div class="title">Measurements</div>
 
-            <div class="row @(HasData ? "on" : "off")">
-                <span>Voltage</span><div>@Fmt(Reader.Model?.Voltage_V) V</div>
-            </div>
-            <div class="row @(HasData ? "on" : "off")">
-                <span>Current</span><div>@Fmt(Reader.Model?.Current_A) A</div>
-            </div>
-            <div class="row @(HasData ? "on" : "off")">
-                <span>Power</span><div>@Fmt(Power) W</div>
-            </div>
+            <div class="row @(HasData ? "on" : "off")"><span>Voltage</span><div>@Fmt(Reader.Model?.Voltage_V) V</div></div>
+            <div class="row @(HasData ? "on" : "off")"><span>Current</span><div>@Fmt(Reader.Model?.Current_A) A</div></div>
+            <div class="row @(HasData ? "on" : "off")"><span>Power</span><div>@Fmt(Power) W</div></div>
 
             <hr />
 
-            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")">
-                <span>AC Voltage</span><div>@Fmt(Reader.Model?.Ac?.Voltage_V) V</div>
-            </div>
-            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")">
-                <span>AC Current</span><div>@Fmt(Reader.Model?.Ac?.Current_A) A</div>
-            </div>
-            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")">
-                <span>AC Freq</span><div>@Fmt(Reader.Model?.Ac?.Frequency_Hz) Hz</div>
-            </div>
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")"><span>AC Voltage</span><div>@Fmt(Reader.Model?.Ac?.Voltage_V) V</div></div>
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")"><span>AC Current</span><div>@Fmt(Reader.Model?.Ac?.Current_A) A</div></div>
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")"><span>AC Freq</span><div>@Fmt(Reader.Model?.Ac?.Frequency_Hz) Hz</div></div>
         </div>
 
-        <!-- Gap & Temp -->
+        <!-- Gap & Temperature (VALUE ONLY) -->
         <div class="card">
             <div class="title">Gap & Temperature</div>
 
-            <div class="row @GapClass">
-                <span>Gap</span><div>@Fmt(Reader.Model?.Wireless?.Gap_mm) mm</div>
-            </div>
-            <div class="row @TempPriClass">
-                <span>Temp Primary</span><div>@Fmt(Reader.Model?.Temperature?.Primary_C) °C</div>
-            </div>
-            <div class="row @TempSecClass">
-                <span>Temp Secondary</span><div>@Fmt(Reader.Model?.Temperature?.Secondary_C) °C</div>
-            </div>
+            <div class="row @GapClass"><span>Gap</span><div>@Fmt(Reader.Model?.Wireless?.Gap_mm) mm</div></div>
+            <div class="row @TempPriClass"><span>Temp Primary</span><div>@Fmt(Reader.Model?.Temperature?.Primary_C) °C</div></div>
+            <div class="row @TempSecClass"><span>Temp Secondary</span><div>@Fmt(Reader.Model?.Temperature?.Secondary_C) °C</div></div>
         </div>
-    </div>
 
-    <!-- ================= COLUMN 2 ================= -->
-    <div>
+        <!-- Status & Fault (BOOL ONLY) -->
         <div class="card">
             <div class="title">Status & Fault</div>
 
             @BoolState("Charging", Reader.Model?.Charging)
             @FaultState("Fault", Reader.Model?.Fault == true)
-
             @FaultState("OCP", Reader.Model?.Status?.Ocp == true)
             @FaultState("OVP", Reader.Model?.Status?.Ovp == true)
             @FaultState("Watchdog", Reader.Model?.Status?.Watchdog == true)
         </div>
 
+        <!-- Wireless Flags (BOOL ONLY) -->
         <div class="card">
             <div class="title">Wireless</div>
 
             @BoolState("Wireless OK", Reader.Model?.WirelessStatusReport?.WirelessOk)
             @BoolState("Under Current", Reader.Model?.WirelessStatusReport?.UnderCurrent, "warn")
-            @BoolState("Over Gap", IsGapWarn, "warn")
-            @BoolState("Over Temp", IsTempWarn, "warn")
         </div>
     </div>
 
     <!-- ================= COLUMN 3 ================= -->
     <div>
-        <!-- COMM -->
+        <!-- Communication (VALUE) -->
         <div class="card">
             <div class="title">Wireless Communication</div>
 
-            <div class="row @(Reader.Model?.CommInfo != null ? "on" : "off")">
-                <span>Channel</span><div>@Reader.Model?.CommInfo?.Channel</div>
-            </div>
-            <div class="row @(Reader.Model?.CommInfo != null ? "on" : "off")">
-                <span>Comm ID</span><div>@Reader.Model?.CommInfo?.CommId</div>
-            </div>
-            <div class="row @CommQualityClass">
-                <span>Success Rate</span><div>@FmtPct(Reader.Model?.CommInfo?.SuccessRate)</div>
-            </div>
+            <div class="row @(Reader.Model?.CommInfo != null ? "on" : "off")"><span>Channel</span><div>@Reader.Model?.CommInfo?.Channel</div></div>
+            <div class="row @(Reader.Model?.CommInfo != null ? "on" : "off")"><span>Comm ID</span><div>@Reader.Model?.CommInfo?.CommId</div></div>
+            <div class="row @CommQualityClass"><span>Success Rate</span><div>@FmtPct(Reader.Model?.CommInfo?.SuccessRate)</div></div>
         </div>
 
-        <!-- LIFE -->
+        <!-- Life / Health (VALUE) -->
         <div class="card">
             <div class="title">Life / Health</div>
 
-            <div class="row @(Reader.Model?.LifeA != null ? "on" : "off")">
-                <span>Ah Delivered</span><div>@Fmt(Reader.Model?.LifeA?.AhDelivered)</div>
-            </div>
-            <div class="row @(Reader.Model?.LifeA != null ? "on" : "off")">
-                <span>Charge Cycles</span><div>@Reader.Model?.LifeA?.ChargeCycles</div>
-            </div>
-            <div class="row @(Reader.Model?.LifeB != null ? "on" : "off")">
-                <span>Uptime</span><div>@FmtTime(Reader.Model?.LifeB?.UptimeSec)</div>
-            </div>
-            <div class="row @(Reader.Model?.LifeC != null ? "on" : "off")">
-                <span>Load Time</span><div>@FmtTime(Reader.Model?.LifeC?.LoadTimeSec)</div>
-            </div>
+            <div class="row @(Reader.Model?.LifeA != null ? "on" : "off")"><span>Ah Delivered</span><div>@Fmt(Reader.Model?.LifeA?.AhDelivered)</div></div>
+            <div class="row @(Reader.Model?.LifeA != null ? "on" : "off")"><span>Charge Cycles</span><div>@Reader.Model?.LifeA?.ChargeCycles</div></div>
+            <div class="row @(Reader.Model?.LifeB != null ? "on" : "off")"><span>Uptime</span><div>@FmtTime(Reader.Model?.LifeB?.UptimeSec)</div></div>
+            <div class="row @(Reader.Model?.LifeC != null ? "on" : "off")"><span>Load Time</span><div>@FmtTime(Reader.Model?.LifeC?.LoadTimeSec)</div></div>
         </div>
 
-        <!-- INFO -->
+        <!-- Device Info (VALUE) -->
         <div class="card">
             <div class="title">Device Info</div>
 
-            <div class="row @(Reader.Model?.ConfigA != null ? "on" : "off")">
-                <span>Serial</span><div>@Reader.Model?.ConfigA?.SerialNumber</div>
-            </div>
-            <div class="row @(Reader.Model?.ConfigA != null ? "on" : "off")">
-                <span>SW Version</span>
-                <div>@($"{Reader.Model?.ConfigA?.SwMajor}.{Reader.Model?.ConfigA?.SwMinor}.{Reader.Model?.ConfigA?.SwDebug}")</div>
-            </div>
-            <div class="row @(Reader.Model?.ConfigB != null ? "on" : "off")">
-                <span>HW Version</span>
-                <div>@($"{Reader.Model?.ConfigB?.HwMajor}.{Reader.Model?.ConfigB?.HwMinor}")</div>
-            </div>
+            <div class="row @(Reader.Model?.ConfigA != null ? "on" : "off")"><span>Serial</span><div>@Reader.Model?.ConfigA?.SerialNumber</div></div>
+            <div class="row @(Reader.Model?.ConfigA != null ? "on" : "off")"><span>SW Version</span><div>@($"{Reader.Model?.ConfigA?.SwMajor}.{Reader.Model?.ConfigA?.SwMinor}.{Reader.Model?.ConfigA?.SwDebug}")</div></div>
+            <div class="row @(Reader.Model?.ConfigB != null ? "on" : "off")"><span>HW Version</span><div>@($"{Reader.Model?.ConfigB?.HwMajor}.{Reader.Model?.ConfigB?.HwMinor}")</div></div>
         </div>
     </div>
 
@@ -302,9 +258,6 @@
         > 75 => "warn",
         _ => "on"
     };
-
-    bool IsGapWarn => GapClass == "warn";
-    bool IsTempWarn => TempPriClass == "warn" || TempSecClass == "warn";
 
     string CommQualityClass => Reader.Model?.CommInfo?.SuccessRate switch
     {
