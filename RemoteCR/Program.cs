@@ -2,6 +2,7 @@
 using RemoteCR.Components;
 using RemoteCR.Services.Can;
 using RemoteCR.Services.Modbus;
+using RemoteCR.Services.SocketCanv1;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +14,17 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ModbusBackgroundSe
 builder.Services.AddSignalR();
 builder.Services.AddSingleton(new TadaService());
 
-builder.Services.AddSingleton<SocketCan>(_ => new SocketCan("can0"));
+builder.Services.AddSingleton<SocketCan>(sp =>
+{
+    // có thể đọc từ config nếu muốn
+    return new SocketCan("can0");
+});
+builder.Services.AddSingleton<CanSocketReaderService>();
+builder.Services.AddSingleton<CanSocketWriterService>();
+
+builder.Services.AddHostedService<CanReaderServicev1>();
+
+
 builder.Services.AddSingleton<CanStateContainer>();
 builder.Services.AddSingleton<DeltaDecoder>();
 builder.Services.AddSingleton<DeltaChargerCommandService>();
