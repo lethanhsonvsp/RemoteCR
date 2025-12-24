@@ -10,7 +10,7 @@ public class CanSocketWriterService : IDisposable
     {
         _can = can;
 
-        // 10 Hz là chuẩn cho Delta
+        // Gửi lệnh mỗi 100 ms (bắt buộc theo tài liệu)
         _timer = new Timer(_ => Send(), null, 0, 100);
     }
 
@@ -21,9 +21,12 @@ public class CanSocketWriterService : IDisposable
 
     private void Send()
     {
-        // 🔴 BẮT BUỘC: 0x191
+        // TX Control Frame = 0x191
         _can.Send(0x191, ControlModuleEncoder.Encode(_cmd));
     }
 
-    public void Dispose() => _timer.Dispose();
+    public void Dispose()
+    {
+        _timer.Dispose();
+    }
 }
