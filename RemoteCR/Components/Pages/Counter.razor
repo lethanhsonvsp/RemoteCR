@@ -1,7 +1,7 @@
 ﻿@page "/counter"
 @using RemoteCR.Services.Modbus
 @rendermode InteractiveServer
-@inject ModbusBackgroundService ModbusService 
+@inject ModbusBackgroundService ModbusService
 
 <h3 class="mb-4 fw-bold text-dark">📡 Trạng thái thiết bị RS-485</h3>
 
@@ -16,89 +16,109 @@ else
     <div class="card shadow-sm border-0 rounded-4">
         <div class="card-body p-4">
 
-            <!-- Trạng thái cơ bản -->
-            <div class="row mb-4">
-                <div class="col-6 d-flex align-items-center gap-2">
+            <!-- ===== System Status ===== -->
+            <div class="row mb-3">
+                <div class="col-6">
                     <b>Heartbeat:</b>
-                    <span class="badge @(state.Heartbeat ? "bg-success" : "bg-secondary") rounded-pill">
-                        @(state.Heartbeat ? "ON" : "OFF")
+                    <span class="badge bg-secondary rounded-pill ms-2">
+                        @state.Heartbeat
                     </span>
                 </div>
-                <div class="col-6 d-flex align-items-center gap-2">
-                    <b>Locked:</b>
-                    <span class="badge @(state.Locked ? "bg-danger" : "bg-success") rounded-pill">
-                        @(state.Locked ? "YES" : "NO")
+
+                <div class="col-6">
+                    <b>Remote Ready:</b>
+                    <span class="badge @(state.RemoteReady ? "bg-success" : "bg-danger") rounded-pill ms-2">
+                        @(state.RemoteReady ? "YES" : "NO")
                     </span>
                 </div>
             </div>
 
-            <div class="mb-3">
-                @if (state.LostLink)
-                {
-                    <div class="alert alert-danger d-flex align-items-center gap-2 p-3 rounded-3">
-                        <i class="bi bi-exclamation-triangle-fill"></i> MẤT KẾT NỐI TAY CẦM
-                    </div>
-                }
-                else
-                {
-                    <b>LostLink:</b>
-                    <span class="badge bg-success rounded-pill">NO</span>
-                }
+            <div class="row mb-3">
+                <div class="col-6">
+                    <b>E-Stop:</b>
+                    <span class="badge @(state.EStop ? "bg-danger" : "bg-success") rounded-pill ms-2">
+                        @(state.EStop ? "YES" : "NO")
+                    </span>
+                </div>
+
+                <div class="col-6">
+                    <b>Enable:</b>
+                    <span class="badge @(state.Enable ? "bg-success" : "bg-secondary") rounded-pill ms-2">
+                        @(state.Enable ? "ON" : "OFF")
+                    </span>
+                </div>
             </div>
 
-            <div class="mb-4">
-                <b>EStop:</b>
-                <span class="badge @(state.EStop ? "bg-danger" : "bg-success") rounded-pill">
-                    @(state.EStop ? "YES" : "NO")
-                </span>
-            </div>
+            @if (!state.RemoteReady)
+            {
+                <div class="alert alert-danger d-flex align-items-center gap-2 p-3 rounded-3 mb-4">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    Remote Controller NOT READY (mất kết nối tay cầm)
+                </div>
+            }
 
-            <!-- Chế độ -->
+            <!-- ===== Mode ===== -->
             <div class="mb-4">
-                <b>Chế độ:</b>
-                <span class="badge bg-info text-dark rounded-pill">
+                <b>Mode:</b>
+                <span class="badge bg-info text-dark rounded-pill ms-2">
                     @state.Mode
                 </span>
             </div>
 
-
-            <!-- Action -->
+            <!-- ===== Digital Buttons ===== -->
             <div class="mb-4">
-                <b>Action:</b>
-                <div class="mt-2">
-                    @RenderActiveAction("Lift Up", state.LiftUp)
-                    @RenderActiveAction("Lift Down", state.LiftDown)
-                    @RenderActiveAction("Rotate Left", state.RotateLeft)
-                    @RenderActiveAction("Rotate Right", state.RotateRight)
-                    @RenderActiveAction("Forward", state.Forward)
-                    @RenderActiveAction("Backward", state.Backward)
-                    @RenderActiveAction("Left", state.Left)
-                    @RenderActiveAction("Right", state.Right)
-                    @RenderActiveAction("Mode Select", state.ModeSelect)
-                    @RenderActiveAction("Enable", state.Enable)
+                <b>Nút bấm:</b>
 
-                    @if (!AnyActionPressed())
-                    {
-                        <span class="text-muted">Không có nút nào được bấm</span>
-                    }
+                <div class="d-flex flex-wrap mt-2">
+                    @RenderButton("Lift Up", state.LiftUp)
+                    @RenderButton("Lift Down", state.LiftDown)
+                    @RenderButton("Rotate Left", state.RotateLeft)
+                    @RenderButton("Rotate Right", state.RotateRight)
+                    @RenderButton("Mode Select", state.ModeSelect)
+                    @RenderButton("Enable", state.Enable)
                 </div>
             </div>
 
-            <!-- Speed -->
-            @if (state.Speed > 0)
-            {
-                <label class="form-label fw-semibold"><b>Tốc độ</b> (@state.Speed%)</label>
-                <div class="progress rounded-3" style="height: 24px;">
-                    <div class="progress-bar bg-info progress-bar-striped progress-bar-animated"
-                         role="progressbar"
-                         style="width:@state.Speed%; transition: width 0.3s ease-in-out;"
-                         aria-valuenow="@state.Speed"
-                         aria-valuemin="0"
-                         aria-valuemax="100">
-                        @state.Speed%
+            <!-- ===== Joystick Analog ===== -->
+            <div class="mb-4">
+                <b>Joystick (Analog):</b>
+
+                <div class="mt-3">
+                    <label class="form-label fw-semibold">
+                        Tiến / Lùi (Linear): @FormatAxis(state.Linear)
+                    </label>
+                    <div class="progress rounded-3" style="height: 22px;">
+                        <div class="progress-bar bg-primary"
+                             style="width:@AxisToPercent(state.Linear)%">
+                        </div>
                     </div>
                 </div>
-            }
+
+                <div class="mt-3">
+                    <label class="form-label fw-semibold">
+                        Trái / Phải (Angular): @FormatAxis(state.Angular)
+                    </label>
+                    <div class="progress rounded-3" style="height: 22px;">
+                        <div class="progress-bar bg-warning"
+                             style="width:@AxisToPercent(state.Angular)%">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== Speed ===== -->
+            <div class="mb-3">
+                <label class="form-label fw-semibold">
+                    Tốc độ: @(state.Speed * 100)%
+                </label>
+                <div class="progress rounded-3" style="height: 24px;">
+                    <div class="progress-bar bg-info progress-bar-striped progress-bar-animated"
+                         style="width:@(state.Speed * 100)%">
+                        @(state.Speed * 100)%
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 }
@@ -123,15 +143,19 @@ else
         };
     }
 
-    private string GetMode()
+    private RenderFragment RenderButton(string label, bool isOn) => builder =>
     {
-        if (state == null) return "Unknown";
+        builder.OpenElement(0, "span");
 
-        // Ví dụ: mode xác định theo Enable/ModeSelect (bạn có thể thay đổi logic cho phù hợp)
-        if (state.Enable) return "Enable";
-        if (state.ModeSelect) return "Mode Select";
-        return "Default";
-    }
+        var css = isOn
+            ? "badge bg-success badge-action"
+            : "badge bg-secondary badge-action";
+
+        builder.AddAttribute(1, "class", css);
+        builder.AddContent(2, label);
+
+        builder.CloseElement();
+    };
 
     private RenderFragment RenderActiveAction(string label, bool isActive) => builder =>
     {
@@ -143,11 +167,22 @@ else
             builder.CloseElement();
         }
     };
-    private bool AnyActionPressed()
+
+    private bool AnyButtonPressed()
     {
         if (state == null) return false;
-        return state.LiftUp || state.LiftDown || state.RotateLeft || state.RotateRight ||
-               state.Forward || state.Backward || state.Left || state.Right ||
-               state.ModeSelect || state.Enable;
+        return state.LiftUp || state.LiftDown ||
+               state.RotateLeft || state.RotateRight ||
+               state.ModeSelect;
+    }
+
+    private static string FormatAxis(float v)
+        => v.ToString("0.00");
+
+    private static int AxisToPercent(float v)
+    {
+        // v: -1 → +1  →  0% → 100%
+        var p = (v + 1f) * 50f;
+        return (int)Math.Clamp(p, 0, 100);
     }
 }

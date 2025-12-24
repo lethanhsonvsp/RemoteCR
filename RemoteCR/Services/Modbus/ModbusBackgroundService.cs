@@ -13,76 +13,95 @@ namespace RemoteCR.Services.Modbus
 
         public ModbusBackgroundService()
         {
-            _mb = new ModbusRtuClient("COM4");
+            _mb = new ModbusRtuClient("COM8");
         }
-        // Giải mã dữ liệu đọc về theo mapping trong tài liệu (2 thanh ghi từ 0x0001) → 4 bytes
-        // regs[0] = Word0 (H), regs[1] = Word1 (H?) — lưu ý: mỗi "Word" ở Modbus là 16-bit big-endian.
-        // Ở tài liệu: Data0..Data3 là 4 byte theo thứ tự [Word0_H][Word0_L][Word1_H][Word1_L]
-        public static (byte data0, byte data1, byte data2, byte data3) ToBytes(ushort[] regs)
-        {
-            if (regs == null || regs.Length < 2) throw new ArgumentException("Need 2 registers");
-            byte data0 = (byte)(regs[0] >> 8);
-            byte data1 = (byte)(regs[0] & 0xFF);
-            byte data2 = (byte)(regs[1] >> 8);
-            byte data3 = (byte)(regs[1] & 0xFF);
-            return (data0, data1, data2, data3);
-        }
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            (byte oldD0, byte oldD1, byte oldD2, byte oldD3) = (0, 0, 0, 0);
+            DeviceState? last = null;
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    var regs = _mb.ReadHoldingRegisters(_slave, 0x0001, 3);
-                    var (d0, d1, d2, d3) = ToBytes(regs);
+                    // ✅ ĐỌC 4 WORD
+                    var regs = _mb.ReadHoldingRegisters(_slave, 0x0001, 4);
+                    var b = ToBytes(regs);
 
-                    if (d0 != oldD0 || d1 != oldD1 || d2 != oldD2 || d3 != oldD3)
+                    byte d0 = b[0]; // Word0 H
+                    byte d1 = b[1]; // Word0 L
+                    byte d2 = b[2]; // Word1 H
+                    byte d3 = b[3]; // Word1 L
+                    byte d6 = b[6]; // Word3 H (Joystick FB)
+                    byte d7 = b[7]; // Word3 L (Joystick LR)
+
+                    var state = new DeviceState
                     {
-                        var state = new DeviceState
-                        {
-                            Heartbeat = (d0 & 0b1000_0000) != 0,
-                            LostLink = (d0 & 0b0000_0100) != 0,
-                            Locked = (d0 & 0b0000_0010) != 0,
-                            EStop = (d0 & 0b0000_0001) != 0,
+                        // ===== System =====
+                        Heartbeat = (d0 >> 4) & 0x0F,
+                        LostLink = (d0 & 0b0000_0100) != 0,
+                        RemoteReady = (d0 & 0b0000_0100) == 0,
+                        EStop = (d0 & 0b0000_0001) != 0,
 
-                            LiftUp = (d1 & 0b0000_0001) != 0,
-                            LiftDown = (d1 & 0b0000_0010) != 0,
-                            RotateLeft = (d1 & 0b0000_0100) != 0,
-                            RotateRight = (d1 & 0b0000_1000) != 0,
+                        // ===== Buttons =====
+                        Enable = (d1 & 0b1000_0000) != 0,
+                        ModeSelect = (d1 & 0b0100_0000) != 0,
 
-                            Forward = (d2 & 0b0001_0000) != 0,
-                            Backward = (d2 & 0b0010_0000) != 0,
-                            Left = (d2 & 0b0100_0000) != 0,
-                            Right = (d2 & 0b1000_0000) != 0,
+                        LiftUp = (d1 & 0b0000_0001) != 0,
+                        LiftDown = (d1 & 0b0000_0010) != 0,
+                        RotateLeft = (d1 & 0b0000_0100) != 0,
+                        RotateRight = (d1 & 0b0000_1000) != 0,
 
-                            ModeSelect = (d1 & 0b0100_0000) != 0, // ModeSelect = d1 == 0x40,
-                            Enable = (d1 & 0b1000_0000) != 0,  
-                            Speed = d3 <= 100 ? d3 : 0,
-                            Mode = DecodeMode(d2)
+                        // ===== Speed =====
+                        Speed = Math.Clamp((int)d3, 0, 100) / 100f,
+                        // ===== Mode =====
+                        Mode = DecodeMode(d2)
+                    };
 
-                        };
+                    // ===== Joystick ANALOG =====
+                    state.Linear = (d6 - 127f) / 127f;
+                    state.Angular = (d7 - 127f) / 127f;
 
-                        // Tạo chuỗi Action để debug/log
-                        state.Action = BuildActionString(state);
+                    // ===== Safety =====
+                    if (!state.RemoteReady || state.EStop || !state.Enable)
+                    {
+                        state.Linear = 0;
+                        state.Angular = 0;
+                    }
 
+                    state.Action = BuildActionString(state);
+
+                    if (!state.Equals(last))
+                    {
                         OnStateChanged?.Invoke(state);
-                        (oldD0, oldD1, oldD2, oldD3) = (d0, d1, d2, d3);
+                        last = state;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Lỗi đọc Modbus: {ex.Message}");
+                    Console.WriteLine($"[Modbus] Error: {ex.Message}");
                 }
 
                 await Task.Delay(200, stoppingToken);
             }
         }
+
+        private static byte[] ToBytes(ushort[] regs)
+        {
+            if (regs.Length < 4) throw new ArgumentException("Need 4 registers");
+
+            return new[]
+            {
+                (byte)(regs[0] >> 8), (byte)regs[0],
+                (byte)(regs[1] >> 8), (byte)regs[1],
+                (byte)(regs[2] >> 8), (byte)regs[2],
+                (byte)(regs[3] >> 8), (byte)regs[3],
+            };
+        }
+
         private static string DecodeMode(byte d2)
         {
-            byte low = (byte)(d2 & 0x0F); // chỉ lấy 4 bit thấp
-            return low switch
+            return (d2 & 0x0F) switch
             {
                 0x00 => "Default",
                 0x01 => "Maintenance",
@@ -93,42 +112,48 @@ namespace RemoteCR.Services.Modbus
 
         private static string BuildActionString(DeviceState s)
         {
+            if (!s.RemoteReady) return "Remote Not Ready";
+            if (s.EStop) return "E-STOP";
+            if (!s.Enable) return "Disabled";
+
+            if (Math.Abs(s.Linear) > 0.05)
+                return s.Linear > 0 ? "Forward" : "Backward";
+
+            if (Math.Abs(s.Angular) > 0.05)
+                return s.Angular > 0 ? "Right" : "Left";
+
             if (s.LiftUp) return "Lift Up";
             if (s.LiftDown) return "Lift Down";
             if (s.RotateLeft) return "Rotate Left";
             if (s.RotateRight) return "Rotate Right";
-            if (s.Forward) return "Forward";
-            if (s.Backward) return "Backward";
-            if (s.Left) return "Left";
-            if (s.Right) return "Right";
-            if (s.ModeSelect) return "Mode Select";
-            if (s.Enable) return "Enable";
-            if (s.Speed > 0) return $"Speed {s.Speed}";
-            return "None";
+
+            return "Idle";
         }
     }
-    public class DeviceState
-    {
-        public bool Heartbeat { get; set; }
-        public bool LostLink { get; set; }
-        public bool Locked { get; set; }
-        public bool EStop { get; set; }
-        public string Action { get; set; } = "None";
+}
+public class DeviceState
+{
+    // ===== System =====
+    public int Heartbeat { get; set; }
+    public bool RemoteReady { get; set; }
+    public bool LostLink { get; set; }
+    public bool EStop { get; set; }
+    public bool Enable { get; set; }
+    public string Mode { get; set; } = "Unknown";
 
-        // Binary mapping
-        public bool LiftUp { get; set; }
-        public bool LiftDown { get; set; }
-        public bool RotateLeft { get; set; }
-        public bool RotateRight { get; set; }
-        public bool Forward { get; set; }
-        public bool Backward { get; set; }
-        public bool Left { get; set; }
-        public bool Right { get; set; }
-        public bool ModeSelect { get; set; }
-        public bool Enable { get; set; }
+    // ===== Buttons =====
+    public bool LiftUp { get; set; }
+    public bool LiftDown { get; set; }
+    public bool RotateLeft { get; set; }
+    public bool RotateRight { get; set; }
+    public bool ModeSelect { get; set; }
 
-        public int Speed { get; set; }
-        public string Mode { get; set; } = "Unknown";
+    // ===== Analog Joystick =====
+    public float Linear { get; set; }    // -1 → +1
+    public float Angular { get; set; }   // -1 → +1
 
-    }
+    // ===== Speed =====
+    public float Speed { get; set; }     // 0 → 1
+
+    public string Action { get; set; } = "Idle";
 }
