@@ -4,25 +4,35 @@ public class CanSocketWriterService : IDisposable
 {
     private readonly SocketCan _can;
     private readonly Timer _timer;
-    private ControlModuleCommand _cmd = new();
+
+    // 🔒 Command state duy nhất
+    private readonly ControlModuleCommand _cmd = new();
+    private readonly object _lock = new();
 
     public CanSocketWriterService(SocketCan can)
     {
         _can = can;
 
-        // Gửi lệnh mỗi 100 ms (bắt buộc theo tài liệu)
+        // ⏱ TX 100ms – đúng theo protocol
         _timer = new Timer(_ => Send(), null, 0, 100);
     }
 
-    public void SetCommand(ControlModuleCommand cmd)
+    // ✅ CÁCH DUY NHẤT ĐỂ UPDATE COMMAND
+    public void Update(Action<ControlModuleCommand> update)
     {
-        _cmd = cmd;
+        lock (_lock)
+        {
+            update(_cmd);
+        }
     }
 
     private void Send()
     {
-        // TX Control Frame = 0x191
-        _can.Send(0x191, ControlModuleEncoder.Encode(_cmd));
+        lock (_lock)
+        {
+            // TX Control Module Command – 0x191
+            _can.Send(0x191, ControlModuleEncoder.Encode(_cmd));
+        }
     }
 
     public void Dispose()

@@ -108,7 +108,7 @@
                 <span>Voltage (V)</span>
                 <div>
                     <input type="number" step="0.5"
-                           value="@Cmd.DemandVoltage_V"
+                           value="48"
                            disabled="@(!IsConnected)"
                            @onchange="OnVoltageChanged"
                            style="width:80px" />
@@ -119,10 +119,11 @@
                 <span>Current (A)</span>
                 <div>
                     <input type="number" step="0.5"
-                           value="@Cmd.DemandCurrent_A"
+                           value="10"
                            disabled="@(!IsConnected)"
                            @onchange="OnCurrentChanged"
                            style="width:80px" />
+
                 </div>
             </div>
 
@@ -211,9 +212,7 @@
 
     </div>
 </div>
-
 @code {
-    ControlModuleCommand Cmd = new();
 
     bool IsConnected => Can.IsConnected;
     bool HasData => Reader.Model != null;
@@ -221,20 +220,34 @@
 
     protected override void OnInitialized()
     {
-        Cmd.DemandVoltage_V = 48;
-        Cmd.DemandCurrent_A = 10;
-        Writer.SetCommand(Cmd);
+        // Init default setpoint
+        Writer.Update(cmd =>
+        {
+            cmd.DemandVoltage_V = 48;
+            cmd.DemandCurrent_A = 10;
+        });
+
         Reader.OnChange += Refresh;
     }
 
     void Refresh() => InvokeAsync(StateHasChanged);
-    public void Dispose() => Reader.OnChange -= Refresh;
+
+    public void Dispose()
+    {
+        Reader.OnChange -= Refresh;
+    }
+
+    // ================= UI HELPERS =================
 
     RenderFragment BoolState(string t, bool? v, string c = "on")
-        => @<div class="chk @(v == true ? c : "off")"><input type="checkbox" checked="@(v == true)" disabled />@t</div>;
+        => @<div class="chk @(v == true ? c : "off")">
+        <input type="checkbox" checked="@(v == true)" disabled />@t
+    </div>;
 
     RenderFragment FaultState(string t, bool f)
-        => @<div class="chk @(f ? "fault" : "off")"><input type="checkbox" checked="@f" disabled />@t</div>;
+        => @<div class="chk @(f ? "fault" : "off")">
+        <input type="checkbox" checked="@f" disabled />@t
+    </div>;
 
     string GapClass => Reader.Model?.Wireless?.Gap_mm switch
     { null => "off", > 20 => "fault", > 12 => "warn", _ => "on" };
@@ -248,50 +261,64 @@
     string CommQualityClass => Reader.Model?.CommInfo?.SuccessRate switch
     { null => "off", < 0.90 => "fault", < 0.97 => "warn", _ => "on" };
 
+    string Fmt(double? v) => v.HasValue ? v.Value.ToString("F1") : "--";
+    string FmtPct(double? v) => v.HasValue ? (v.Value * 100).ToString("F1") + " %" : "--";
+    string FmtTime(uint? s) => s == null ? "--" : $"{(int)TimeSpan.FromSeconds(s.Value).TotalHours}h";
+
+    // ================= CONTROL =================
+
     void OnVoltageChanged(ChangeEventArgs e)
     {
         if (double.TryParse(e.Value?.ToString(), out var v))
-        { Cmd.DemandVoltage_V = v; Writer.SetCommand(Cmd); }
+        {
+            Writer.Update(cmd => cmd.DemandVoltage_V = v);
+        }
     }
 
     void OnCurrentChanged(ChangeEventArgs e)
     {
         if (double.TryParse(e.Value?.ToString(), out var a))
-        { Cmd.DemandCurrent_A = a; Writer.SetCommand(Cmd); }
+        {
+            Writer.Update(cmd => cmd.DemandCurrent_A = a);
+        }
     }
 
     async Task PowerOn()
     {
-        Cmd.DemandVoltage_V = 48;
-        Cmd.DemandCurrent_A = 10;
+        // Step 1: clear fault + set setpoint
+        Writer.Update(cmd =>
+        {
+            cmd.DemandVoltage_V = 48;
+            cmd.DemandCurrent_A = 10;
+            cmd.ClearFaults = true;
+        });
 
-        Cmd.PowerStage1 = true;
-        Cmd.PowerStages[0] = true;
+        await Task.Delay(150);
 
-        Writer.SetCommand(Cmd);
-
-        // ⛔ KHÔNG reset PowerStage1
+        // Step 2: enable power stage
+        Writer.Update(cmd =>
+        {
+            cmd.ClearFaults = false;
+            cmd.PowerStage1 = true;
+            cmd.PowerStages[0] = true;
+        });
     }
-
 
     void PowerOff()
     {
-        Cmd.PowerStage1 = false;
+        Writer.Update(cmd =>
+        {
+            cmd.PowerStage1 = false;
 
-        // Tắt tất cả stage
-        for (int i = 0; i < Cmd.PowerStages.Length; i++)
-            Cmd.PowerStages[i] = false;
-
-        Writer.SetCommand(Cmd);
+            for (int i = 0; i < cmd.PowerStages.Length; i++)
+                cmd.PowerStages[i] = false;
+        });
     }
+
     async Task ClearFault()
     {
-        Cmd.ClearFaults = true; Writer.SetCommand(Cmd);
+        Writer.Update(cmd => cmd.ClearFaults = true);
         await Task.Delay(200);
-        Cmd.ClearFaults = false; Writer.SetCommand(Cmd);
+        Writer.Update(cmd => cmd.ClearFaults = false);
     }
-
-    string Fmt(double? v) => v.HasValue ? v.Value.ToString("F1") : "--";
-    string FmtPct(double? v) => v.HasValue ? (v.Value * 100).ToString("F1") + " %" : "--";
-    string FmtTime(uint? s) => s == null ? "--" : $"{(int)TimeSpan.FromSeconds(s.Value).TotalHours}h";
 }
