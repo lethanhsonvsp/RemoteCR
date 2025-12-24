@@ -2,11 +2,12 @@
 
 public static class CanMessageDecoder
 {
-    public static void Decode(uint baseId, byte[] d, ChargingSummaryModel m)
+    public static void Decode(uint canId, byte[] d, ChargingSummaryModel m)
     {
-        switch (baseId)
+        switch (canId)
         {
-            case 0x310:
+            /* ================= DC ================= */
+            case 0x311:
                 m.Update(new PowerMeasurement
                 {
                     Voltage_V = CanBit.Get(d, 0, 20) * 0.001,
@@ -16,7 +17,8 @@ public static class CanMessageDecoder
                 });
                 break;
 
-            case 0x320:
+            /* ================= STATUS ================= */
+            case 0x321:
                 m.Update(new StatusReport
                 {
                     State = (ChargerState)CanBit.Get(d, 0, 6),
@@ -27,7 +29,8 @@ public static class CanMessageDecoder
                 });
                 break;
 
-            case 0x3C0:
+            /* ================= AC INPUT ================= */
+            case 0x3C1:
                 m.Ac = new AcMeasurement
                 {
                     Voltage_V = CanBit.Get(d, 0, 20) * 0.001,
@@ -36,7 +39,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x3E0:
+            /* ================= WIRELESS ================= */
+            case 0x3E1:
                 m.Wireless = new WirelessStatus
                 {
                     Efficiency_pct = CanBit.Get(d, 16, 10) * 0.1,
@@ -44,7 +48,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x3F0:
+            /* ================= TEMPERATURE ================= */
+            case 0x3F1:
                 m.Temperature = new TemperatureReport
                 {
                     Secondary_C = (short)CanBit.Get(d, 0, 16) * 0.005,
@@ -52,7 +57,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x500:
+            /* ================= LIFE ================= */
+            case 0x511:
                 m.LifeA = new LifeReportA
                 {
                     AhDelivered = CanBit.Get(d, 0, 32) * 0.1,
@@ -60,14 +66,14 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x510:
+            case 0x521:
                 m.LifeB = new LifeReportB
                 {
                     UptimeSec = (uint)CanBit.Get(d, 0, 32)
                 };
                 break;
 
-            case 0x520:
+            case 0x531:
                 m.LifeC = new LifeReportC
                 {
                     LoadTimeSec = (uint)CanBit.Get(d, 0, 32),
@@ -75,7 +81,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x5F0:
+            /* ================= WIRELESS STATUS ================= */
+            case 0x5F1:
                 m.WirelessStatusReport = new WirelessStatusReport
                 {
                     UnderCurrent = CanBit.Get(d, 6, 1) == 1,
@@ -83,7 +90,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x720:
+            /* ================= CONFIG ================= */
+            case 0x721:
                 m.ConfigA = new ConfigReportA
                 {
                     SerialNumber = (uint)CanBit.Get(d, 0, 32),
@@ -94,7 +102,7 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x730:
+            case 0x731:
                 m.ConfigB = new ConfigReportB
                 {
                     DeltaPN = (uint)CanBit.Get(d, 0, 32),
@@ -105,7 +113,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x770:
+            /* ================= COMM ================= */
+            case 0x771:
                 m.CommInfo = new CommInfoReport
                 {
                     Channel = (byte)CanBit.Get(d, 0, 8),
@@ -114,7 +123,8 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            case 0x780:
+            /* ================= CAN BAUD ================= */
+            case 0x781:
                 m.CanBaud = (CanBaudRate)CanBit.Get(d, 0, 4);
                 break;
         }

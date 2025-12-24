@@ -21,8 +21,7 @@ public class CanSocketReaderService
     {
         lock (_lock)
         {
-            var baseId = frame.Id & 0x7F0;
-            CanMessageDecoder.Decode(baseId, frame.Data, Model);
+            CanMessageDecoder.Decode(frame.Id, frame.Data, Model);
         }
 
         // 🔒 debounce UI update (max 10 Hz)
