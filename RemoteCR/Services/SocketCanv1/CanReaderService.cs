@@ -1,8 +1,9 @@
 ﻿using Microsoft.Extensions.Hosting;
+using RemoteCR.Services.Can;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RemoteCR.Services.Can;
+namespace RemoteCR.Services.SocketCanv1;
 
 public class CanReaderService : BackgroundService
 {
