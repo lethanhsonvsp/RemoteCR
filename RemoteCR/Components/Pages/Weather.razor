@@ -7,141 +7,291 @@
 @inject SocketCan Can
 @implements IDisposable
 
+<style>
+    .status-dot {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+
+        .status-dot.online {
+            background: #28a745;
+            box-shadow: 0 0 8px #28a745;
+        }
+
+        .status-dot.offline {
+            background: #dc3545;
+            box-shadow: 0 0 8px #dc3545;
+        }
+
+    .gui {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1.6fr;
+        gap: 10px;
+    }
+
+    .card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 10px 12px;
+        box-shadow: 0 0 8px rgba(0,0,0,.12);
+        margin-bottom: 10px;
+    }
+
+    .title {
+        font-weight: 600;
+        font-size: .9rem;
+        margin-bottom: 6px;
+    }
+
+    /* VALUE ROW */
+    .row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        font-size: .8rem;
+        align-items: center;
+    }
+
+        .row div {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+    /* BOOL ROW */
+    .chk {
+        display: grid;
+        grid-template-columns: 16px 1fr;
+        font-size: .8rem;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .on {
+        color: #28a745;
+        font-weight: 600;
+    }
+
+    .warn {
+        color: #ffc107;
+        font-weight: 600;
+    }
+
+    .fault {
+        color: #dc3545;
+        font-weight: 600;
+    }
+
+    .off {
+        color: #999;
+    }
+</style>
+
 <h3>⚡ Wireless Charger Dashboard</h3>
 
 <h5>
-    <span style="
-        display:inline-block;
-        width:14px;height:14px;
-        border-radius:50%;
-        background:@(IsConnected ? "green" : "red");
-        margin-right:6px">
-    </span>
+    <span class="status-dot @(IsConnected ? "online" : "offline")"></span>
     @(IsConnected ? "Connected" : "Disconnected")
 </h5>
 
-<div style="max-width:420px">
+<div class="gui">
 
-    <p><b>Voltage:</b> @Fmt(Reader.Model?.Voltage_V) V</p>
-    <p><b>Current:</b> @Fmt(Reader.Model?.Current_A) A</p>
-    <p><b>Gap:</b> @Fmt(Reader.Model?.Wireless?.Gap_mm) mm</p>
-
-    <hr />
-
+    <!-- ================= COLUMN 1 : CONTROL + VALUE ================= -->
     <div>
-        <label>Demand Voltage</label><br />
-        <input type="number" step="0.5"
-               value="@Cmd.DemandVoltage_V"
-               @onchange="OnVoltageChanged"
-               disabled="@(!IsConnected)" />
+
+        <!-- CONTROL -->
+        <div class="card">
+            <div class="title">Set Point Control</div>
+
+            <div class="row">
+                <span>Voltage (V)</span>
+                <div>
+                    <input type="number" step="0.5"
+                           value="@Cmd.DemandVoltage_V"
+                           disabled="@(!IsConnected)"
+                           @onchange="OnVoltageChanged"
+                           style="width:80px" />
+                </div>
+            </div>
+
+            <div class="row">
+                <span>Current (A)</span>
+                <div>
+                    <input type="number" step="0.5"
+                           value="@Cmd.DemandCurrent_A"
+                           disabled="@(!IsConnected)"
+                           @onchange="OnCurrentChanged"
+                           style="width:80px" />
+                </div>
+            </div>
+
+            <div style="margin-top:6px">
+                <button disabled="@(!IsConnected)" @onclick="PowerOn">Power ON</button>
+                <button disabled="@(!IsConnected)" @onclick="PowerOff">Power OFF</button>
+                <button disabled="@(!IsConnected)" @onclick="ClearFault">Clear Fault</button>
+            </div>
+        </div>
+
+        <!-- MEASUREMENTS -->
+        <div class="card">
+            <div class="title">Measurements</div>
+
+            <div class="row @(HasData ? "on" : "off")"><span>Voltage</span><div>@Fmt(Reader.Model?.Voltage_V) V</div></div>
+            <div class="row @(HasData ? "on" : "off")"><span>Current</span><div>@Fmt(Reader.Model?.Current_A) A</div></div>
+            <div class="row @(HasData ? "on" : "off")"><span>Power</span><div>@Fmt(Power) W</div></div>
+
+            <hr />
+
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")"><span>AC Voltage</span><div>@Fmt(Reader.Model?.Ac?.Voltage_V) V</div></div>
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")"><span>AC Current</span><div>@Fmt(Reader.Model?.Ac?.Current_A) A</div></div>
+            <div class="row @(Reader.Model?.Ac != null ? "on" : "off")"><span>AC Frequency</span><div>@Fmt(Reader.Model?.Ac?.Frequency_Hz) Hz</div></div>
+        </div>
+
+        <!-- GAP & TEMP -->
+        <div class="card">
+            <div class="title">Gap & Temperature</div>
+
+            <div class="row @GapClass"><span>Gap</span><div>@Fmt(Reader.Model?.Wireless?.Gap_mm) mm</div></div>
+            <div class="row @TempPriClass"><span>Temp Primary</span><div>@Fmt(Reader.Model?.Temperature?.Primary_C) °C</div></div>
+            <div class="row @TempSecClass"><span>Temp Secondary</span><div>@Fmt(Reader.Model?.Temperature?.Secondary_C) °C</div></div>
+        </div>
+
     </div>
 
+    <!-- ================= COLUMN 2 : BOOL ================= -->
     <div>
-        <label>Demand Current</label><br />
-        <input type="number" step="0.5"
-               value="@Cmd.DemandCurrent_A"
-               @onchange="OnCurrentChanged"
-               disabled="@(!IsConnected)" />
+
+        <div class="card">
+            <div class="title">Status & Fault</div>
+
+            @BoolState("Charging", Reader.Model?.Charging)
+            @FaultState("Fault", Reader.Model?.Fault == true)
+            @FaultState("OCP", Reader.Model?.Status?.Ocp == true)
+            @FaultState("OVP", Reader.Model?.Status?.Ovp == true)
+            @FaultState("Watchdog", Reader.Model?.Status?.Watchdog == true)
+        </div>
+
+        <div class="card">
+            <div class="title">Wireless Flags</div>
+
+            @BoolState("Wireless OK", Reader.Model?.WirelessStatusReport?.WirelessOk)
+            @BoolState("Under Current", Reader.Model?.WirelessStatusReport?.UnderCurrent, "warn")
+        </div>
+
     </div>
 
-    <br />
+    <!-- ================= COLUMN 3 : VALUE ================= -->
+    <div>
 
-    <button @onclick="PowerOn" disabled="@(!CanEnable)">▶ POWER ON</button>
-    <button @onclick="PowerOff" disabled="@(!IsConnected)">■ POWER OFF</button>
-    <button @onclick="ClearFault" disabled="@(!IsConnected)">⚠ CLEAR FAULT</button>
+        <div class="card">
+            <div class="title">Wireless Communication</div>
 
-    <hr />
+            <div class="row @(Reader.Model?.CommInfo != null ? "on" : "off")"><span>Channel</span><div>@Reader.Model?.CommInfo?.Channel</div></div>
+            <div class="row @(Reader.Model?.CommInfo != null ? "on" : "off")"><span>Comm ID</span><div>@Reader.Model?.CommInfo?.CommId</div></div>
+            <div class="row @CommQualityClass"><span>Success Rate</span><div>@FmtPct(Reader.Model?.CommInfo?.SuccessRate)</div></div>
+        </div>
 
-    <p>
-        <input type="checkbox" checked="@Reader.Model?.Charging" disabled />
-        Charging
-    </p>
+        <div class="card">
+            <div class="title">Life / Health</div>
 
-    <p>
-        <input type="checkbox" checked="@Reader.Model?.Fault" disabled />
-        Fault
-    </p>
+            <div class="row @(Reader.Model?.LifeA != null ? "on" : "off")"><span>Ah Delivered</span><div>@Fmt(Reader.Model?.LifeA?.AhDelivered)</div></div>
+            <div class="row @(Reader.Model?.LifeA != null ? "on" : "off")"><span>Charge Cycles</span><div>@Reader.Model?.LifeA?.ChargeCycles</div></div>
+            <div class="row @(Reader.Model?.LifeB != null ? "on" : "off")"><span>Uptime</span><div>@FmtTime(Reader.Model?.LifeB?.UptimeSec)</div></div>
+            <div class="row @(Reader.Model?.LifeC != null ? "on" : "off")"><span>Load Time</span><div>@FmtTime(Reader.Model?.LifeC?.LoadTimeSec)</div></div>
+        </div>
 
+        <div class="card">
+            <div class="title">Device Info</div>
+
+            <div class="row @(Reader.Model?.ConfigA != null ? "on" : "off")"><span>Serial</span><div>@Reader.Model?.ConfigA?.SerialNumber</div></div>
+            <div class="row @(Reader.Model?.ConfigA != null ? "on" : "off")"><span>SW Version</span><div>@($"{Reader.Model?.ConfigA?.SwMajor}.{Reader.Model?.ConfigA?.SwMinor}.{Reader.Model?.ConfigA?.SwDebug}")</div></div>
+            <div class="row @(Reader.Model?.ConfigB != null ? "on" : "off")"><span>HW Version</span><div>@($"{Reader.Model?.ConfigB?.HwMajor}.{Reader.Model?.ConfigB?.HwMinor}")</div></div>
+        </div>
+
+    </div>
 </div>
 
 @code {
     ControlModuleCommand Cmd = new();
 
     bool IsConnected => Can.IsConnected;
-
-    bool CanEnable =>
-        IsConnected &&
-        Reader.Model?.WirelessStatusReport?.WirelessOk == true &&
-        (Reader.Model?.Wireless?.Gap_mm ?? 999) < 20 &&
-        Reader.Model?.Fault != true;
+    bool HasData => Reader.Model != null;
+    double Power => (Reader.Model?.Voltage_V ?? 0) * (Reader.Model?.Current_A ?? 0);
 
     protected override void OnInitialized()
     {
         Cmd.DemandVoltage_V = 48;
         Cmd.DemandCurrent_A = 10;
-
         Writer.SetCommand(Cmd);
         Reader.OnChange += Refresh;
     }
 
     void Refresh() => InvokeAsync(StateHasChanged);
-
     public void Dispose() => Reader.OnChange -= Refresh;
+
+    RenderFragment BoolState(string t, bool? v, string c = "on")
+        => @<div class="chk @(v == true ? c : "off")"><input type="checkbox" checked="@(v == true)" disabled />@t</div>;
+
+    RenderFragment FaultState(string t, bool f)
+        => @<div class="chk @(f ? "fault" : "off")"><input type="checkbox" checked="@f" disabled />@t</div>;
+
+    string GapClass => Reader.Model?.Wireless?.Gap_mm switch
+    { null => "off", > 20 => "fault", > 12 => "warn", _ => "on" };
+
+    string TempPriClass => Reader.Model?.Temperature?.Primary_C switch
+    { null => "off", > 90 => "fault", > 75 => "warn", _ => "on" };
+
+    string TempSecClass => Reader.Model?.Temperature?.Secondary_C switch
+    { null => "off", > 90 => "fault", > 75 => "warn", _ => "on" };
+
+    string CommQualityClass => Reader.Model?.CommInfo?.SuccessRate switch
+    { null => "off", < 0.90 => "fault", < 0.97 => "warn", _ => "on" };
 
     void OnVoltageChanged(ChangeEventArgs e)
     {
         if (double.TryParse(e.Value?.ToString(), out var v))
-        {
-            Cmd.DemandVoltage_V = v;
-            Writer.SetCommand(Cmd);
-        }
+        { Cmd.DemandVoltage_V = v; Writer.SetCommand(Cmd); }
     }
 
     void OnCurrentChanged(ChangeEventArgs e)
     {
         if (double.TryParse(e.Value?.ToString(), out var a))
-        {
-            Cmd.DemandCurrent_A = a;
-            Writer.SetCommand(Cmd);
-        }
+        { Cmd.DemandCurrent_A = a; Writer.SetCommand(Cmd); }
     }
 
     async Task PowerOn()
     {
-        // 🔴 BẮT BUỘC
+        Cmd.DemandVoltage_V = 48;
+        Cmd.DemandCurrent_A = 10;
+
         Cmd.PowerStage1 = true;
         Cmd.PowerStages[0] = true;
 
-        // Clear fault pulse
-        Cmd.ClearFaults = true;
         Writer.SetCommand(Cmd);
 
-        await Task.Delay(200);
-
-        Cmd.ClearFaults = false;
-        Writer.SetCommand(Cmd);
+        // ⛔ KHÔNG reset PowerStage1
     }
+
 
     void PowerOff()
     {
         Cmd.PowerStage1 = false;
 
+        // Tắt tất cả stage
         for (int i = 0; i < Cmd.PowerStages.Length; i++)
             Cmd.PowerStages[i] = false;
 
         Writer.SetCommand(Cmd);
     }
-
     async Task ClearFault()
     {
-        Cmd.ClearFaults = true;
-        Writer.SetCommand(Cmd);
-
+        Cmd.ClearFaults = true; Writer.SetCommand(Cmd);
         await Task.Delay(200);
-
-        Cmd.ClearFaults = false;
-        Writer.SetCommand(Cmd);
+        Cmd.ClearFaults = false; Writer.SetCommand(Cmd);
     }
 
     string Fmt(double? v) => v.HasValue ? v.Value.ToString("F1") : "--";
+    string FmtPct(double? v) => v.HasValue ? (v.Value * 100).ToString("F1") + " %" : "--";
+    string FmtTime(uint? s) => s == null ? "--" : $"{(int)TimeSpan.FromSeconds(s.Value).TotalHours}h";
 }
