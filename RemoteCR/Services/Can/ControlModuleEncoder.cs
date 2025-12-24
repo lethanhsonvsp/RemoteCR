@@ -6,13 +6,20 @@ public static class ControlModuleEncoder
     {
         var d = new byte[8];
 
+        // Demand Voltage [0..19] (0.001 V)
         CanBit.Set(d, 0, 20, (ulong)(c.DemandVoltage_V / 0.001));
+
+        // Power Enable (bit 20)
         CanBit.Set(d, 20, 1, c.PowerStage1 ? 1UL : 0UL);
+
+        // Clear Fault (bit 21)
         CanBit.Set(d, 21, 1, c.ClearFaults ? 1UL : 0UL);
 
-        for (int i = 0; i < 9; i++)
+        // Power stages bits [22..30]
+        for (int i = 0; i < c.PowerStages.Length && i < 9; i++)
             CanBit.Set(d, 22 + i, 1, c.PowerStages[i] ? 1UL : 0UL);
 
+        // Demand Current [32..49] (0.001 A)
         CanBit.Set(d, 32, 18, (ulong)(c.DemandCurrent_A / 0.001));
 
         return d;
