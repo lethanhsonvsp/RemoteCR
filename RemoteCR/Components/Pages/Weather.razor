@@ -207,20 +207,49 @@
 
         <div class="card">
             <div class="title">191 Send Checklist</div>
+
             @Check("CAN Connected", IsConnected)
-            @Check("Demand Current > 0", SetCurrent > 0)
-            @Check("Wireless OK", Reader.Model?.WirelessStatusReport?.WirelessOk == true)
-            @Check("Gap ≤ 12 mm", Reader.Model?.Wireless?.Gap_mm <= 12)
-            @Check("AC Present", Reader.Model?.Ac != null)
-            @Check("No Fault", Reader.Model?.Fault != true)
+            @Check("Demand Voltage > 0 (TX)",
+                        Reader.ControlCmd?.DemandVoltage_V > 0)
+            @Check("Demand Current > 0 (TX)",
+                        Reader.ControlCmd?.DemandCurrent_A > 0)
+
+            @Check("DC Voltage Valid (RX)", DcVoltageValid)
+            @Check("DC Current Valid (RX)", DcCurrentValid)
+
+            @Check("Power Enable (TX)",
+                        Reader.ControlCmd?.PowerEnable == true)
+            @Check("State = Standby", HasStatusRx && Reader.Model!.Status!.State == ChargerState.Standby)
+            @Check("Wireless OK",HasWirelessRx && Reader.Model!.WirelessStatusReport!.WirelessOk == true)
+            @Check("Gap ≤ 12 mm",
+                        Reader.Model?.Wireless?.Gap_mm != null &&
+                        Reader.Model!.Wireless!.Gap_mm <= 12)
+            @Check("AC Present",HasAcRx)
+            @Check("No Fault",HasStatusRx && Reader.Model!.Fault == false)
+            @Check("No CAN Watchdog",HasStatusRx && Reader.Model!.Status!.Watchdog == false)
+            @Check("No UnderCurrent",HasWirelessRx && Reader.Model!.WirelessStatusReport!.UnderCurrent == false)
         </div>
 
+
         <div class="card">
-            <div class="title">191 Result (TX → RX)</div>
-            <div class="row"><span>Last TX</span><div>@(_lastTx191?.ToLocalTime().ToString("HH:mm:ss") ?? "--")</div></div>
-            <div class="row"><span>Requested</span><div>@(_txRequestedPowerOn ? "POWER ON" : "POWER OFF")</div></div>
-            <div class="row"><span>RX State</span><div>@Reader.Model?.Status?.State</div></div>
-            <div class="row @Tx191ResultClass"><span>Result</span><div>@Tx191Result</div></div>
+            <div class="title">TX Command (0x191 – CAN)</div>
+
+            <div class="row">
+                <span>Voltage</span>
+                <div>@Fmt(Reader.ControlCmd?.DemandVoltage_V) V</div>
+            </div>
+
+            <div class="row">
+                <span>Current</span>
+                <div>@Fmt(Reader.ControlCmd?.DemandCurrent_A) A</div>
+            </div>
+
+            <div class="row">
+                <span>Power Enable</span>
+                <div class="@(Reader.ControlCmd?.PowerEnable == true ? "on" : "off")">
+                    @(Reader.ControlCmd?.PowerEnable == true ? "ON" : "OFF")
+                </div>
+            </div>
         </div>
 
     </div>
@@ -228,8 +257,25 @@
 </div>
 
 @code {
-    double SetVoltage = 54;
-    double SetCurrent = 10;
+    bool HasStatusRx => Reader.Model?.Status != null;
+    bool HasWirelessRx => Reader.Model?.WirelessStatusReport != null;
+    bool HasAcRx => Reader.Model?.Ac != null;
+    bool HasDcRx => Reader.Model?.Voltage_V != null && Reader.Model?.Current_A != null;
+    const double DcVoltageMin = 5.0;   // <5V coi như chưa đóng công suất
+    const double DcCurrentMin = 0.3;   // <0.3A coi như chưa có tải
+
+    bool DcVoltageValid =>
+        HasDcRx &&
+        Reader.ControlCmd?.DemandVoltage_V > 0 &&
+        Reader.Model!.Voltage_V >= DcVoltageMin &&
+        Reader.Model!.Voltage_V < Reader.ControlCmd!.DemandVoltage_V;
+
+    bool DcCurrentValid =>
+        HasDcRx &&
+        Reader.Model!.Current_A >= DcCurrentMin;
+
+    double SetVoltage;
+    double SetCurrent;
     bool PowerEnable;
 
     DateTime? _lastTx191;
@@ -240,7 +286,7 @@
 
     bool CanPowerOn =>
         IsConnected &&
-        SetCurrent > 0 &&
+        Reader.ControlCmd?.DemandCurrent_A > 0 &&
         Reader.Model?.WirelessStatusReport?.WirelessOk == true &&
         Reader.Model?.Wireless?.Gap_mm <= 12 &&
         Reader.Model?.Ac != null;
@@ -289,17 +335,45 @@
         Writer.Update(c => c.ClearFaults = false);
     }
 
-    string Tx191Result =>
-        _lastTx191 == null ? "--" :
-        (DateTime.UtcNow - _lastTx191.Value).TotalMilliseconds < 500 ? "WAITING RX…" :
-        _txRequestedPowerOn && Reader.Model?.Status?.State == ChargerState.Charging ? "✅ ACCEPTED" :
-        _txRequestedPowerOn && Reader.Model?.Status?.State == ChargerState.Standby ? "❌ REJECTED" :
-        Reader.Model?.Status?.State == ChargerState.Fault ? "❌ FAULT" :
-        "UNKNOWN";
+    string Tx191Result
+    {
+        get
+        {
+            if (_lastTx191 == null) return "--";
+
+            // Chờ RX phản hồi
+            if ((DateTime.UtcNow - _lastTx191.Value).TotalMilliseconds < 500)
+                return "WAITING RX…";
+
+            var state = Reader.Model?.Status?.State;
+            var current = Reader.Model?.Current_A ?? 0;
+
+            if (_txRequestedPowerOn)
+            {
+                if (state == ChargerState.Charging && current > 0.3)
+                    return "✅ ACCEPTED (Power Flowing)";
+
+                if (state == ChargerState.Charging && current <= 0.3)
+                    return "⚠ CHARGING – NO CURRENT";
+
+                if (state == ChargerState.Standby)
+                    return "❌ REJECTED";
+
+                if (state == ChargerState.Fault)
+                    return "❌ FAULT";
+            }
+
+            return "UNKNOWN";
+        }
+    }
+
 
     string Tx191ResultClass =>
         Tx191Result.StartsWith("✅") ? "on" :
-        Tx191Result.StartsWith("❌") ? "fault" : "warn";
+        Tx191Result.StartsWith("⚠") ? "warn" :
+        Tx191Result.StartsWith("❌") ? "fault" :
+        "off";
+
 
     RenderFragment Bool(string t, bool v) => @<div class="chk @(v ? "on" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
     RenderFragment Fault(string t, bool v) => @<div class="chk @(v ? "fault" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;

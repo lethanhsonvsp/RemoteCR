@@ -2,11 +2,48 @@
 
 public static class CanMessageDecoder
 {
-    public static void Decode(uint canId, byte[] d, ChargingSummaryModel m)
+    /// <summary>
+    /// Decode CAN frame.
+    /// - Với frame RX: cập nhật ChargingSummaryModel
+    /// - Với frame 0x191: trả về ControlModuleCommandReport (TX mirror)
+    /// </summary>
+    public static ControlModuleCommandReport? Decode(
+        uint canId,
+        byte[] d,
+        ChargingSummaryModel m)
     {
         switch (canId)
         {
-            /* ================= DC ================= */
+            /* ================= TX COMMAND (MIRROR) ================= */
+            case 0x191:
+                {
+                    var r = new ControlModuleCommandReport();
+
+                    // [0..19] Voltage demand (0.001 V)
+                    r.DemandVoltage_V =
+                        CanBit.Get(d, 0, 20) * 0.001;
+
+                    // [20] Power Enable (Master)
+                    r.PowerEnable =
+                        CanBit.Get(d, 20, 1) == 1;
+
+                    // [21] Clear Fault
+                    r.ClearFaults =
+                        CanBit.Get(d, 21, 1) == 1;
+
+                    // [22..30] Power stages
+                    for (int i = 0; i < r.PowerStages.Length; i++)
+                        r.PowerStages[i] =
+                            CanBit.Get(d, 22 + i, 1) == 1;
+
+                    // [32..49] Current demand (0.001 A)
+                    r.DemandCurrent_A =
+                        CanBit.Get(d, 32, 18) * 0.001;
+
+                    return r;
+                }
+
+            /* ================= DC MEASUREMENT ================= */
             case 0x311:
                 m.Update(new PowerMeasurement
                 {
@@ -39,7 +76,7 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= WIRELESS ================= */
+            /* ================= WIRELESS STATUS ================= */
             case 0x3E1:
                 m.Wireless = new WirelessStatus
                 {
@@ -81,7 +118,7 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= WIRELESS STATUS ================= */
+            /* ================= WIRELESS FLAGS ================= */
             case 0x5F1:
                 m.WirelessStatusReport = new WirelessStatusReport
                 {
@@ -128,5 +165,7 @@ public static class CanMessageDecoder
                 m.CanBaud = (CanBaudRate)CanBit.Get(d, 0, 4);
                 break;
         }
+
+        return null;
     }
 }
