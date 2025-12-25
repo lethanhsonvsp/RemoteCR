@@ -21,14 +21,19 @@ public static class ControlModuleEncoder
         CanBit.Set(d, 0, 20, voltage);
 
         /* ============================================================
-         * PowerStage1 – BIT 20 (ON / OFF)
+         * MASTER POWER ENABLE – BIT 20
          * ============================================================ */
-        CanBit.Set(d, 20, 1, c.PowerStage1 ? 1UL : 0UL);
+        CanBit.Set(d, 20, 1, c.PowerEnable ? 1UL : 0UL);
 
         /* ============================================================
-         * Clear Faults – BIT 21
+         * CLEAR FAULT – BIT 21
          * ============================================================ */
         CanBit.Set(d, 21, 1, c.ClearFaults ? 1UL : 0UL);
+
+        /* ============================================================
+         * POWER STAGE 1 – BIT 22 (QUAN TRỌNG)
+         * ============================================================ */
+        CanBit.Set(d, 22, 1, c.PowerStage1 ? 1UL : 0UL);
 
         /* ============================================================
          * Demand Current [32..49] – scale 0.001 A

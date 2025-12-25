@@ -28,7 +28,6 @@ builder.Services.AddHostedService<CanReaderServicev1>();
 builder.Services.AddSingleton<CanStateContainer>();
 builder.Services.AddSingleton<DeltaDecoder>();
 builder.Services.AddSingleton<DeltaChargerCommandService>();
-
 builder.Services.AddHostedService<CanReaderService>();
 
 

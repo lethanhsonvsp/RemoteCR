@@ -1,7 +1,5 @@
 ﻿@page "/"
 @rendermode InteractiveServer
-
-@using RemoteCR.Services.Can
 @inject CanSocketReaderService Reader
 @inject CanSocketWriterService Writer
 @inject SocketCan Can
@@ -265,6 +263,7 @@
 
 </div>
 
+
 @code {
     bool HasStatusRx => Reader.Model?.Status != null;
     bool HasWirelessRx => Reader.Model?.WirelessStatusReport != null;
@@ -322,7 +321,9 @@
             c.ClearFaults = false;
             c.DemandVoltage_V = SetVoltage;
             c.DemandCurrent_A = SetCurrent;
-            c.PowerStage1 = true;
+
+            c.PowerEnable = true;   // 🔴 THIẾU
+            c.PowerStage1 = true;   // 🟢 OK
         });
 
         Writer.StartTx();
@@ -333,16 +334,13 @@
     {
         Writer.Update(c =>
         {
-            c.PowerStage1 = false;     // BIT 20 = 0
-            c.DemandCurrent_A = 0;    // dòng = 0
+            c.PowerEnable = false;  // 🔴 TẮT MASTER
+            c.PowerStage1 = false;  // 🟢 TẮT STAGE
+            c.DemandCurrent_A = 0;
         });
 
-        Writer.StartTx();
-        await Task.Delay(300);        // ~3 frame (100ms)
-
-        Writer.StopTx();
+        Writer.StopTx();   // ⛔ GỬI OFF FRAME CUỐI
     }
-
 
     async Task ClearFault()
     {
