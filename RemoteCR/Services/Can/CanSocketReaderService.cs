@@ -7,8 +7,8 @@ public class CanSocketReaderService
 
     public ChargingSummaryModel Model { get; } = new();
 
-    // ✅ THÊM: mirror TX command
-    public ControlModuleCommandReport? ControlCmd { get; private set; }
+    // ✅ Mirror TX command (0x191)
+    public ControlModuleCommandReport? ControlCmd => Model.ControlCmd;
 
     public event Action? OnChange;
 
@@ -24,12 +24,8 @@ public class CanSocketReaderService
     {
         lock (_lock)
         {
-            var cmd =
-                CanMessageDecoder.Decode(frame.Id, frame.Data, Model);
-
-            // ✅ BẮT FRAME 0x191
-            if (cmd != null)
-                ControlCmd = cmd;
+            // ✅ Decode chỉ update Model
+            CanMessageDecoder.Decode(frame.Id, frame.Data, Model);
         }
 
         // 🔒 debounce UI update (max 10 Hz)

@@ -4,10 +4,10 @@ public static class CanMessageDecoder
 {
     /// <summary>
     /// Decode CAN frame.
-    /// - Với frame RX: cập nhật ChargingSummaryModel
-    /// - Với frame 0x191: trả về ControlModuleCommandReport (TX mirror)
+    /// - RX frames: update ChargingSummaryModel
+    /// - 0x191: mirror TX command into Model.ControlCmd
     /// </summary>
-    public static ControlModuleCommandReport? Decode(
+    public static void Decode(
         uint canId,
         byte[] d,
         ChargingSummaryModel m)
@@ -16,32 +16,16 @@ public static class CanMessageDecoder
         {
             /* ================= TX COMMAND (MIRROR) ================= */
             case 0x191:
+                m.ControlCmd = new ControlModuleCommandReport
                 {
-                    var r = new ControlModuleCommandReport();
-
-                    // [0..19] Voltage demand (0.001 V)
-                    r.DemandVoltage_V =
-                        CanBit.Get(d, 0, 20) * 0.001;
-
-                    // [20] Power Enable (Master)
-                    r.PowerEnable =
-                        CanBit.Get(d, 20, 1) == 1;
-
-                    // [21] Clear Fault
-                    r.ClearFaults =
-                        CanBit.Get(d, 21, 1) == 1;
-
-                    // [22..30] Power stages
-                    for (int i = 0; i < r.PowerStages.Length; i++)
-                        r.PowerStages[i] =
-                            CanBit.Get(d, 22 + i, 1) == 1;
-
-                    // [32..49] Current demand (0.001 A)
-                    r.DemandCurrent_A =
-                        CanBit.Get(d, 32, 18) * 0.001;
-
-                    return r;
-                }
+                    DemandVoltage_V = CanBit.Get(d, 0, 20) * 0.001,
+                    PowerEnable = CanBit.Get(d, 20, 1) == 1,
+                    ClearFaults = CanBit.Get(d, 21, 1) == 1,
+                    PowerStage1 = CanBit.Get(d, 22, 1) == 1,
+                    DemandCurrent_A = CanBit.Get(d, 32, 18) * 0.001,
+                    Timestamp = DateTime.UtcNow
+                };
+                break;
 
             /* ================= DC MEASUREMENT ================= */
             case 0x311:
@@ -165,7 +149,5 @@ public static class CanMessageDecoder
                 m.CanBaud = (CanBaudRate)CanBit.Get(d, 0, 4);
                 break;
         }
-
-        return null;
     }
 }
