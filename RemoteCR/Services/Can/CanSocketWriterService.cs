@@ -129,6 +129,8 @@ public sealed class CanSocketWriterService : IDisposable
             return;
 
         _can.Send(0x191, ControlModuleEncoder.Encode(snapshot));
+        // canid data 191
+        Console.WriteLine($"Sent CAN ID 0x191: V={snapshot.DemandVoltage_V}, I={snapshot.DemandCurrent_A}, PE={snapshot.PowerEnable}, PS1={snapshot.PowerStage1}, CF={snapshot.ClearFaults}");
     }
 
     /// <summary>
