@@ -7,11 +7,10 @@ public class CanSocketReaderService
 
     public ChargingSummaryModel Model { get; } = new();
 
-    // Mirror TX command
-    public ControlModuleCommandReport? ControlCmd => Model.ControlCmd;
-
+    // ===== Events =====
     public event Action? OnChange;
 
+    // ===== UI debounce =====
     private DateTime _lastNotify = DateTime.MinValue;
 
     public CanSocketReaderService(SocketCan can)
@@ -20,13 +19,23 @@ public class CanSocketReaderService
         _can.OnFrameReceived += OnFrame;
     }
 
+    // ============================================================
+    // RX HANDLER
+    // ============================================================
     private void OnFrame(SocketCan.CanFrame frame)
     {
         lock (_lock)
         {
             CanMessageDecoder.Decode(frame.Id, frame.Data, Model);
+
+            // 🔎 DEBUG: log TX mirror 0x191
+            if (frame.Id == 0x191 && Model.ControlCmd != null)
+            {
+                Log191(Model.ControlCmd);
+            }
         }
 
+        // debounce UI update (max ~10 Hz)
         var now = DateTime.UtcNow;
         if ((now - _lastNotify).TotalMilliseconds < 100)
             return;
@@ -34,29 +43,63 @@ public class CanSocketReaderService
         _lastNotify = now;
         OnChange?.Invoke();
     }
+    private static void Log191(ControlModuleCommandReport cmd)
+    {
+        Console.WriteLine(
+            $"[CAN RX 0x191] " +
+            $"V={cmd.DemandVoltage_V:F1}V, " +
+            $"I={cmd.DemandCurrent_A:F1}A, " +
+            $"PE={(cmd.PowerEnable ? 1 : 0)}, " +
+            $"ST1={(cmd.PowerStage1 ? 1 : 0)}, " +
+            $"CLR={(cmd.ClearFaults ? 1 : 0)}, " +
+            $"@ {cmd.Timestamp:HH:mm:ss.fff} UTC"
+        );
+    }
 
-    /* =====================================================
-     * HELPERS – RẤT QUAN TRỌNG CHO UI
-     * ===================================================== */
+
+    // ============================================================
+    // TX MIRROR HELPERS (CHO UI)
+    // ============================================================
 
     /// <summary>
-    /// TX 0x191 còn sống hay không (watchdog UI)
+    /// TX 0x191 còn alive không
     /// </summary>
     public bool IsTx191Alive(TimeSpan timeout)
     {
         var cmd = Model.ControlCmd;
-        return cmd != null && !cmd.IsStale(timeout);
+        if (cmd == null) return false;
+
+        return DateTime.UtcNow - cmd.Timestamp <= timeout;
     }
 
     /// <summary>
-    /// Thực sự đang yêu cầu bật công suất
-    /// (PowerEnable + Stage1 + Current > 0 + TX còn sống)
+    /// TX đang yêu cầu bật công suất
     /// </summary>
     public bool IsPowerRequested(TimeSpan timeout)
     {
         var cmd = Model.ControlCmd;
-        return cmd != null
-               && !cmd.IsStale(timeout)
-               && cmd.IsPowerRequested;
+        if (cmd == null) return false;
+
+        if (DateTime.UtcNow - cmd.Timestamp > timeout)
+            return false;
+
+        return
+            cmd.PowerEnable &&
+            cmd.PowerStage1 &&
+            cmd.DemandCurrent_A > 0;
+    }
+
+    /// <summary>
+    /// TX đang ở trạng thái OFF / idle
+    /// </summary>
+    public bool IsPowerOff(TimeSpan timeout)
+    {
+        var cmd = Model.ControlCmd;
+        if (cmd == null) return true;
+
+        if (DateTime.UtcNow - cmd.Timestamp > timeout)
+            return true;
+
+        return !cmd.PowerEnable || cmd.DemandCurrent_A <= 0;
     }
 }

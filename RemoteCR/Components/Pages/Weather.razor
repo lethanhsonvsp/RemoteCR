@@ -217,10 +217,10 @@
 
             @Check("CAN Connected", IsConnected)
             @Check("Demand Voltage > 0 (TX)",
-                        TxAlive && Reader.ControlCmd!.DemandVoltage_V > 0)
+                        TxAlive && Reader.Model.ControlCmd!.DemandVoltage_V > 0)
 
             @Check("Demand Current > 0 (TX)",
-                        TxAlive && Reader.ControlCmd!.DemandCurrent_A > 0)
+                        TxAlive && Reader.Model.ControlCmd!.DemandCurrent_A > 0)
 
             @Check("Power Enable (TX)", TxPowerRequested)
 
@@ -245,12 +245,14 @@
 
             <div class="row">
                 <span>Voltage</span>
-                <div>@Fmt(Reader.ControlCmd?.DemandVoltage_V) V</div>
+                <div>
+                    @Fmt(Reader.Model.ControlCmd!.DemandVoltage_V) V
+                </div>
             </div>
 
             <div class="row">
                 <span>Current</span>
-                <div>@Fmt(Reader.ControlCmd?.DemandCurrent_A) A</div>
+                <div>@Fmt(Reader.Model.ControlCmd?.DemandCurrent_A) A</div>
             </div>
 
             <div class="row">
@@ -279,9 +281,9 @@
 
     bool DcVoltageValid =>
         HasDcRx &&
-        Reader.ControlCmd?.DemandVoltage_V > 0 &&
+        Reader.Model.ControlCmd!.DemandVoltage_V > 0 &&
         Reader.Model!.Voltage_V >= 5.0 &&                 // đã có battery
-        Reader.Model!.Voltage_V <= Reader.ControlCmd!.DemandVoltage_V;
+        Reader.Model!.Voltage_V <= Reader.Model.ControlCmd!.DemandVoltage_V;
 
     bool DcCurrentValid =>
         HasDcRx &&
