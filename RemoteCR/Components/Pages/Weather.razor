@@ -289,7 +289,7 @@
         Reader.Model!.Current_A >= DcCurrentMin;
 
     double SetVoltage = 53;
-    double SetCurrent;
+    double SetCurrent = 10;
 
     bool IsConnected => Can.IsConnected;
     double Power => (Reader.Model?.Voltage_V ?? 0) * (Reader.Model?.Current_A ?? 0);
@@ -322,7 +322,6 @@
             c.ClearFaults = false;
             c.DemandVoltage_V = SetVoltage;
             c.DemandCurrent_A = SetCurrent;
-            c.PowerEnable = true;
             c.PowerStage1 = true;
         });
 
@@ -330,9 +329,18 @@
 
     }
 
-    void PowerOff()
+    async Task PowerOff()
     {
-        Writer.StopTx(); // ⛔ không gửi 191 nữa
+        Writer.Update(c =>
+        {
+            c.PowerStage1 = false;     // BIT 20 = 0
+            c.DemandCurrent_A = 0;    // dòng = 0
+        });
+
+        Writer.StartTx();
+        await Task.Delay(300);        // ~3 frame (100ms)
+
+        Writer.StopTx();
     }
 
 

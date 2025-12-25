@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace RemoteCR.Services.Can;
 
@@ -9,11 +10,17 @@ public class SocketCan
     private const int SOCK_RAW = 3;
     private const int CAN_RAW = 1;
 
+    // ===== SocketCAN options =====
+    private const int SOL_CAN_RAW = 101;
+    private const int CAN_RAW_RECV_OWN_MSGS = 4;
+
     private readonly int _socket;
 
     public bool IsConnected { get; private set; } = false;
 
     public event Action<CanFrame>? OnFrameReceived;
+
+    // ================= STRUCTS =================
 
     public struct CanFrame
     {
@@ -61,7 +68,8 @@ public class SocketCan
         }
     }
 
-    // Linux syscalls
+    // ================= LINUX SYSCALLS =================
+
     [DllImport("libc", SetLastError = true)]
     static extern int socket(int domain, int type, int protocol);
 
@@ -77,7 +85,18 @@ public class SocketCan
     [DllImport("libc", SetLastError = true)]
     static extern int write(int fd, byte[] buffer, int count);
 
-    const uint SIOCGIFINDEX = 0x8933;
+    [DllImport("libc", SetLastError = true)]
+    static extern int setsockopt(
+        int sockfd,
+        int level,
+        int optname,
+        ref int optval,
+        uint optlen
+    );
+
+    private const uint SIOCGIFINDEX = 0x8933;
+
+    // ================= CONSTRUCTOR =================
 
     public SocketCan(string iface)
     {
@@ -89,6 +108,18 @@ public class SocketCan
                 IsConnected = false;
                 return;
             }
+
+            // ============================================================
+            // ✅ ENABLE RX OF OWN TX FRAMES (TX LOOPBACK)
+            // ============================================================
+            int enable = 1;
+            setsockopt(
+                _socket,
+                SOL_CAN_RAW,
+                CAN_RAW_RECV_OWN_MSGS,
+                ref enable,
+                (uint)sizeof(int)
+            );
 
             var ifr = new ifreq(iface);
             if (ioctl(_socket, SIOCGIFINDEX, ref ifr) < 0)
@@ -117,19 +148,22 @@ public class SocketCan
         }
     }
 
+    // ================= SEND =================
+
     /// <summary>
-    /// Gửi 1 frame CAN (ID 11-bit, DLC 0–8).
+    /// Gửi 1 frame CAN (ID 11-bit, DLC 0–8)
     /// </summary>
     public void Send(uint id, byte[] data)
     {
-        if (!IsConnected) return;
+        if (!IsConnected)
+            return;
 
         if (data.Length > 8)
             throw new ArgumentException("CAN Data must be <= 8 bytes");
 
         var frame = new can_frame
         {
-            can_id = id & 0x7FF, // 11-bit ID
+            can_id = id & 0x7FF, // 11-bit standard ID
             can_dlc = (byte)data.Length,
             data = new byte[8]
         };
@@ -140,10 +174,11 @@ public class SocketCan
         byte[] buffer = StructToBytes(frame);
 
         int result = write(_socket, buffer, size);
-
         if (result < 0)
             Console.WriteLine("⚠ CAN write() failed");
     }
+
+    // ================= RECEIVE LOOP =================
 
     public void StartReading(CancellationToken token)
     {
@@ -156,7 +191,7 @@ public class SocketCan
             if (n <= 0)
             {
                 IsConnected = false;
-                return; // báo lỗi cho CanReaderService
+                return;
             }
 
             var frame = ByteArrayToStruct<can_frame>(buffer);
@@ -169,6 +204,8 @@ public class SocketCan
             });
         }
     }
+
+    // ================= MARSHAL HELPERS =================
 
     private static T ByteArrayToStruct<T>(byte[] bytes)
     {
