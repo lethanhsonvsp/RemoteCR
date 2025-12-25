@@ -21,10 +21,15 @@ public static class CanMessageDecoder
                 m.ControlCmd = new ControlModuleCommandReport
                 {
                     DemandVoltage_V = CanBit.Get(d, 0, 20) * 0.001,
-                    PowerEnable = CanBit.Get(d, 20, 1) == 1,
+
+                    // ✅ BIT 20 = Demand_PowerStage1 (ON / OFF)
+                    PowerStage1 = CanBit.Get(d, 20, 1) == 1,
+
+                    // BIT 21 = Clear faults
                     ClearFaults = CanBit.Get(d, 21, 1) == 1,
-                    PowerStage1 = CanBit.Get(d, 22, 1) == 1,
+
                     DemandCurrent_A = CanBit.Get(d, 32, 18) * 0.001,
+
                     Timestamp = DateTime.UtcNow
                 };
                 break;

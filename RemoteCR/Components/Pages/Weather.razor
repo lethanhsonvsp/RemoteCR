@@ -123,12 +123,11 @@
 
             <div class="mt-2">
                 <button @onclick="PowerOn"
-                        disabled="@(!CanPowerOn || IsPowerOn)">
+                        disabled="@(!CanPowerOn)">
                     Power ON
                 </button>
 
-                <button @onclick="PowerOff"
-                        disabled="@(!IsPowerOn)">
+                <button @onclick="PowerOff">
                     Power OFF
                 </button>
 
@@ -213,52 +212,54 @@
     <div>
 
         <div class="card">
-            <div class="title">191 Send Checklist</div>
+            <div class="title">191 đã gửi (TX)</div>
 
-            @Check("Demand Voltage > 0 (TX)",
-                        HasTxCmd && Reader.Model.ControlCmd!.DemandVoltage_V > 0)
-
-            @Check("Demand Current > 0 (TX)",
-                        HasTxCmd && Reader.Model.ControlCmd!.DemandCurrent_A > 0)
-
-            @Check("Power Enable (TX)", TxPowerRequested)
-
-
-            @Check("DC Voltage Valid (RX)", DcVoltageValid)
-            @Check("DC Current Valid (RX)", DcCurrentValid)
-
-            @Check("State = Standby", HasStatusRx && Reader.Model!.Status!.State == ChargerState.Standby)
-            @Check("Wireless OK", HasWirelessRx && Reader.Model!.WirelessStatusReport!.WirelessOk == true)
-            @Check("Gap ≤ 12 mm",
-                        Reader.Model?.Wireless?.Gap_mm != null &&
-                        Reader.Model!.Wireless!.Gap_mm <= 12)
-            @Check("AC Present", HasAcRx)
-            @Check("No Fault", HasStatusRx && Reader.Model!.Fault == false)
-            @Check("No CAN Watchdog", HasStatusRx && Reader.Model!.Status!.Watchdog == false)
-            @Check("No UnderCurrent", HasWirelessRx && Reader.Model!.WirelessStatusReport!.UnderCurrent == false)
-        </div>
-
-
-        <div class="card">
-            <div class="title">TX Command (0x191 – CAN)</div>
-
-            <div class="row">
-                <span>Voltage</span>
-                <div>@Fmt(Reader.Model.ControlCmd?.DemandVoltage_V) V</div>
-            </div>
-
-            <div class="row">
-                <span>Current</span>
-                <div>@Fmt(Reader.Model.ControlCmd?.DemandCurrent_A) A</div>
-            </div>
-
-            <div class="row">
-                <span>Power Enable</span>
-                <div class="@(TxPowerRequested ? "on" : "off")">
-                    @(TxPowerRequested ? "ON" : "OFF")
+            @if (Reader.Model?.ControlCmd == null)
+            {
+                <div class="off">Chưa có frame 0x191</div>
+            }
+            else
+            {
+                <div class="row">
+                    <span>Demand Voltage</span>
+                    <div>@Fmt(Reader.Model.ControlCmd.DemandVoltage_V) V</div>
                 </div>
-            </div>
+
+                <div class="row">
+                    <span>Demand Current</span>
+                    <div>@Fmt(Reader.Model.ControlCmd.DemandCurrent_A) A</div>
+                </div>
+
+                <div class="row">
+                    <span>PowerStage1</span>
+                    <div class="@(Reader.Model.ControlCmd.PowerStage1 ? "on" : "off")">
+                        @(Reader.Model.ControlCmd.PowerStage1 ? "ON" : "OFF")
+                    </div>
+                </div>
+
+                <div class="row">
+                    <span>Clear Fault</span>
+                    <div class="@(Reader.Model.ControlCmd.ClearFaults ? "warn" : "off")">
+                        @(Reader.Model.ControlCmd.ClearFaults ? "YES" : "NO")
+                    </div>
+                </div>
+
+                <div class="row">
+                    <span>TX Alive</span>
+                    <div class="@(TxAlive ? "on" : "fault")">
+                        @(TxAlive ? "YES" : "NO")
+                    </div>
+                </div>
+
+                <div class="row">
+                    <span>Last TX</span>
+                    <div>
+                        @($"{(DateTime.UtcNow - Reader.Model.ControlCmd.Timestamp).TotalMilliseconds:F0} ms ago")
+                    </div>
+                </div>
+            }
         </div>
+
 
     </div>
 
@@ -272,10 +273,10 @@
     bool HasTxCmd => Reader.Model?.ControlCmd != null;
     const double DcVoltageMin = 5.0;   // <5V coi như chưa đóng công suất
     const double DcCurrentMin = 0.3;   // <0.3A coi như chưa có tải
-    bool TxAlive => Reader.IsTx191Alive(TimeSpan.FromMilliseconds(300));
-    bool TxPowerRequested =>
-        Reader.IsPowerRequested(TimeSpan.FromMilliseconds(300));
-    bool IsPowerOn => TxPowerRequested;
+    bool TxAlive =>
+    Reader.Model?.ControlCmd != null &&
+    (DateTime.UtcNow - Reader.Model.ControlCmd.Timestamp)
+        <= TimeSpan.FromMilliseconds(300);
 
     bool DcVoltageValid =>
         HasDcRx &&
@@ -345,7 +346,6 @@
 
     RenderFragment Bool(string t, bool v) => @<div class="chk @(v ? "on" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
     RenderFragment Fault(string t, bool v) => @<div class="chk @(v ? "fault" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
-    RenderFragment Check(string t, bool v) => @<div class="chk @(v ? "on" : "fault")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
 
     string GapClass => Reader.Model?.Wireless?.Gap_mm switch { null => "off", > 20 => "fault", > 12 => "warn", _ => "on" };
     string TempPriClass => Reader.Model?.Temperature?.Primary_C switch { null => "off", > 90 => "fault", > 75 => "warn", _ => "on" };
