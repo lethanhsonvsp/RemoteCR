@@ -309,16 +309,13 @@
     {
         Reader.OnChange += () => InvokeAsync(StateHasChanged);
     }
-
     async Task PowerOn()
     {
         if (!CanPowerOn) return;
 
-        // Clear fault 1 chu kỳ
         Writer.Update(c => c.ClearFaults = true);
         await Task.Delay(300);
 
-        // Gửi command bật công suất
         Writer.Update(c =>
         {
             c.ClearFaults = false;
@@ -327,8 +324,10 @@
             c.PowerEnable = true;
             c.PowerStage1 = true;
         });
-    }
 
+        Writer.StartTx();
+
+    }
 
     void PowerOff()
     {
@@ -338,7 +337,10 @@
             c.PowerStage1 = false;
             c.DemandCurrent_A = 0;
         });
+
+        Writer.StopTx();
     }
+
 
 
     async Task ClearFault()
