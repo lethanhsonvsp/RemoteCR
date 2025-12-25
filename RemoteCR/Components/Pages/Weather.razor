@@ -286,10 +286,14 @@
 
     bool CanPowerOn =>
         IsConnected &&
-        Reader.ControlCmd?.DemandCurrent_A > 0 &&
+        SetCurrent > 0 &&                    // UI input hợp lệ
+        SetVoltage > 0 &&
         Reader.Model?.WirelessStatusReport?.WirelessOk == true &&
         Reader.Model?.Wireless?.Gap_mm <= 12 &&
-        Reader.Model?.Ac != null;
+        Reader.Model?.Ac != null &&
+        Reader.Model?.Fault == false &&
+        Reader.Model?.Status?.Watchdog == false;
+
 
     protected override void OnInitialized()
     {
