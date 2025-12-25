@@ -4,31 +4,26 @@ public sealed class CanSocketWriterService : IDisposable
 {
     private readonly SocketCan _can;
     private readonly Timer _timer;
-
-    private readonly ControlModuleCommand _cmd = new();
     private readonly object _lock = new();
 
-    private TxState _state = TxState.Idle;
+    private readonly ControlModuleCommand _cmd = new();
 
-    private enum TxState
-    {
-        Idle,
-        Active,
-        Stopping
-    }
+    private bool _txEnabled = false;
 
     public CanSocketWriterService(SocketCan can)
     {
         _can = can;
 
-        // TX tick 100 ms theo protocol
-        _timer = new Timer(_ => OnTick(), null, 100, 100);
+        // 🔒 KHỞI TẠO TIMER NHƯNG KHÔNG CHẠY
+        _timer = new Timer(_ => OnTick(), null,
+            Timeout.Infinite,
+            Timeout.Infinite);
     }
 
     /* ================= PUBLIC API ================= */
 
     /// <summary>
-    /// Update nội dung command (Voltage / Current / Flags)
+    /// Update nội dung frame 0x191
     /// </summary>
     public void Update(Action<ControlModuleCommand> update)
     {
@@ -39,78 +34,46 @@ public sealed class CanSocketWriterService : IDisposable
     }
 
     /// <summary>
-    /// Bắt đầu gửi 0x191
+    /// ▶️ BẬT vòng lặp gửi 0x191 (100 ms)
     /// </summary>
     public void StartTx()
     {
         if (!_can.IsConnected)
             return;
 
-        _state = TxState.Active;
+        _txEnabled = true;
+
+        // resume timer
+        _timer.Change(0, 100);
     }
 
     /// <summary>
-    /// Dừng TX – gửi 1 frame OFF cuối
+    /// ⛔ HỦY vòng lặp gửi 0x191 (KHÔNG gửi nữa)
     /// </summary>
     public void StopTx()
     {
-        if (_state == TxState.Active)
-            _state = TxState.Stopping;
+        _txEnabled = false;
+
+        // pause timer
+        _timer.Change(Timeout.Infinite, Timeout.Infinite);
     }
 
-    public bool IsTxActive => _state == TxState.Active;
+    public bool IsTxActive => _txEnabled;
 
     /* ================= CORE LOOP ================= */
 
     private void OnTick()
     {
-        if (!_can.IsConnected)
-        {
-            _state = TxState.Idle;
+        if (!_txEnabled)
             return;
-        }
 
-        switch (_state)
-        {
-            case TxState.Idle:
-                return;
+        if (!_can.IsConnected)
+            return;
 
-            case TxState.Active:
-                SendCurrentCommand();
-                return;
-
-            case TxState.Stopping:
-                SendOffCommand();
-                _state = TxState.Idle;
-                return;
-        }
-    }
-
-    /* ================= SEND HELPERS ================= */
-
-    private void SendCurrentCommand()
-    {
         lock (_lock)
         {
-            // Guard: không gửi command rỗng
-            if (_cmd.DemandVoltage_V <= 0 || _cmd.DemandCurrent_A <= 0)
-                return;
-
             _can.Send(0x191, ControlModuleEncoder.Encode(_cmd));
         }
-    }
-
-    private void SendOffCommand()
-    {
-        var off = new ControlModuleCommand
-        {
-            DemandVoltage_V = _cmd.DemandVoltage_V,
-            DemandCurrent_A = 0,
-            PowerEnable = false,
-            PowerStage1 = false
-        };
-
-        _can.Send(0x191, ControlModuleEncoder.Encode(off));
     }
 
     public void Dispose()
