@@ -215,12 +215,11 @@
         <div class="card">
             <div class="title">191 Send Checklist</div>
 
-            @Check("CAN Connected", IsConnected)
             @Check("Demand Voltage > 0 (TX)",
-                        TxAlive && Reader.Model.ControlCmd!.DemandVoltage_V > 0)
+                        HasTxCmd && Reader.Model.ControlCmd!.DemandVoltage_V > 0)
 
             @Check("Demand Current > 0 (TX)",
-                        TxAlive && Reader.Model.ControlCmd!.DemandCurrent_A > 0)
+                        HasTxCmd && Reader.Model.ControlCmd!.DemandCurrent_A > 0)
 
             @Check("Power Enable (TX)", TxPowerRequested)
 
@@ -245,9 +244,7 @@
 
             <div class="row">
                 <span>Voltage</span>
-                <div>
-                    @Fmt(Reader.Model.ControlCmd!.DemandVoltage_V) V
-                </div>
+                <div>@Fmt(Reader.Model.ControlCmd?.DemandVoltage_V) V</div>
             </div>
 
             <div class="row">
@@ -272,6 +269,7 @@
     bool HasWirelessRx => Reader.Model?.WirelessStatusReport != null;
     bool HasAcRx => Reader.Model?.Ac != null;
     bool HasDcRx => Reader.Model?.Voltage_V != null && Reader.Model?.Current_A != null;
+    bool HasTxCmd => Reader.Model?.ControlCmd != null;
     const double DcVoltageMin = 5.0;   // <5V coi như chưa đóng công suất
     const double DcCurrentMin = 0.3;   // <0.3A coi như chưa có tải
     bool TxAlive => Reader.IsTx191Alive(TimeSpan.FromMilliseconds(300));
@@ -281,8 +279,8 @@
 
     bool DcVoltageValid =>
         HasDcRx &&
-        Reader.Model.ControlCmd!.DemandVoltage_V > 0 &&
-        Reader.Model!.Voltage_V >= 5.0 &&                 // đã có battery
+        HasTxCmd &&
+        Reader.Model!.Voltage_V >= 5.0 &&
         Reader.Model!.Voltage_V <= Reader.Model.ControlCmd!.DemandVoltage_V;
 
     bool DcCurrentValid =>

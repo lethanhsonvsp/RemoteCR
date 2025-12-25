@@ -31,7 +31,7 @@ public class ChargingSummaryModel
     public ConfigReportB? ConfigB { get; set; }
 
     public CanBaudRate? CanBaud { get; set; }
-    public ControlModuleCommandReport ControlCmd { get; internal set; }
+    public ControlModuleCommandReport? ControlCmd { get; internal set; }
 
     // ===== COMM INFO =====
 
