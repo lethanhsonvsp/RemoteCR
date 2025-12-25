@@ -14,7 +14,9 @@ public static class CanMessageDecoder
     {
         switch (canId)
         {
-            /* ================= TX COMMAND (MIRROR) ================= */
+            /* ============================================================
+             * TX COMMAND (Mirror 0x191)
+             * ============================================================ */
             case 0x191:
                 m.ControlCmd = new ControlModuleCommandReport
                 {
@@ -27,30 +29,39 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= DC MEASUREMENT ================= */
+            /* ============================================================
+             * DC POWER MEASUREMENT (0x311)
+             * NOTE:
+             *  - KHÔNG lấy Fault từ frame này
+             *  - Fault chuẩn phải lấy từ 0x321 (StatusReport)
+             * ============================================================ */
             case 0x311:
                 m.Update(new PowerMeasurement
                 {
                     Voltage_V = CanBit.Get(d, 0, 20) * 0.001,
                     Current_A = CanBit.Get(d, 20, 18) * 0.001,
-                    Fault = CanBit.Get(d, 38, 1) == 1,
                     Charging = CanBit.Get(d, 39, 1) == 1
                 });
                 break;
 
-            /* ================= STATUS ================= */
+            /* ============================================================
+             * STATUS REPORT (0x321) – NGUỒN CHÍNH CỦA FAULT
+             * ============================================================ */
             case 0x321:
                 m.Update(new StatusReport
                 {
                     State = (ChargerState)CanBit.Get(d, 0, 6),
                     Fault = CanBit.Get(d, 12, 1) == 1,
                     Ocp = CanBit.Get(d, 18, 1) == 1,
-                    Ovp = CanBit.Get(d, 21, 1) == 1 || CanBit.Get(d, 22, 1) == 1,
+                    Ovp = CanBit.Get(d, 21, 1) == 1
+                               || CanBit.Get(d, 22, 1) == 1,
                     Watchdog = CanBit.Get(d, 24, 1) == 1
                 });
                 break;
 
-            /* ================= AC INPUT ================= */
+            /* ============================================================
+             * AC INPUT MEASUREMENT (0x3C1)
+             * ============================================================ */
             case 0x3C1:
                 m.Ac = new AcMeasurement
                 {
@@ -60,7 +71,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= WIRELESS STATUS ================= */
+            /* ============================================================
+             * WIRELESS STATUS MEASUREMENT (0x3E1)
+             * ============================================================ */
             case 0x3E1:
                 m.Wireless = new WirelessStatus
                 {
@@ -69,7 +82,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= TEMPERATURE ================= */
+            /* ============================================================
+             * TEMPERATURE (0x3F1)
+             * ============================================================ */
             case 0x3F1:
                 m.Temperature = new TemperatureReport
                 {
@@ -78,7 +93,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= LIFE ================= */
+            /* ============================================================
+             * LIFE REPORTS
+             * ============================================================ */
             case 0x511:
                 m.LifeA = new LifeReportA
                 {
@@ -102,7 +119,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= WIRELESS FLAGS ================= */
+            /* ============================================================
+             * WIRELESS FLAGS (0x5F1)
+             * ============================================================ */
             case 0x5F1:
                 m.WirelessStatusReport = new WirelessStatusReport
                 {
@@ -111,7 +130,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= CONFIG ================= */
+            /* ============================================================
+             * CONFIGURATION
+             * ============================================================ */
             case 0x721:
                 m.ConfigA = new ConfigReportA
                 {
@@ -134,7 +155,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= COMM ================= */
+            /* ============================================================
+             * COMMUNICATION INFO (0x771)
+             * ============================================================ */
             case 0x771:
                 m.CommInfo = new CommInfoReport
                 {
@@ -144,7 +167,9 @@ public static class CanMessageDecoder
                 };
                 break;
 
-            /* ================= CAN BAUD ================= */
+            /* ============================================================
+             * CAN BAUD CONFIG (0x781)
+             * ============================================================ */
             case 0x781:
                 m.CanBaud = (CanBaudRate)CanBit.Get(d, 0, 4);
                 break;

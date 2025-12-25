@@ -122,8 +122,16 @@
             </div>
 
             <div class="mt-2">
-                <button @onclick="PowerOn" disabled="@(!CanPowerOn || PowerEnable)">Power ON</button>
-                <button @onclick="PowerOff" disabled="@(!PowerEnable)">Power OFF</button>
+                <button @onclick="PowerOn"
+                        disabled="@(!CanPowerOn || IsPowerOn)">
+                    Power ON
+                </button>
+
+                <button @onclick="PowerOff"
+                        disabled="@(!IsPowerOn)">
+                    Power OFF
+                </button>
+
                 <button @onclick="ClearFault" disabled="@(!IsConnected)">Clear Fault</button>
             </div>
         </div>
@@ -132,7 +140,6 @@
             <div class="title">TX Command (0x191)</div>
             <div class="row"><span>Demand Voltage</span><div>@SetVoltage V</div></div>
             <div class="row"><span>Demand Current</span><div>@SetCurrent A</div></div>
-            <div class="row"><span>Power Enable</span><div class="@(PowerEnable ? "on" : "off")">@(PowerEnable ? "ON" : "OFF")</div></div>
         </div>
 
         <div class="card">
@@ -210,24 +217,26 @@
 
             @Check("CAN Connected", IsConnected)
             @Check("Demand Voltage > 0 (TX)",
-                        Reader.ControlCmd?.DemandVoltage_V > 0)
+                        TxAlive && Reader.ControlCmd!.DemandVoltage_V > 0)
+
             @Check("Demand Current > 0 (TX)",
-                        Reader.ControlCmd?.DemandCurrent_A > 0)
+                        TxAlive && Reader.ControlCmd!.DemandCurrent_A > 0)
+
+            @Check("Power Enable (TX)", TxPowerRequested)
+
 
             @Check("DC Voltage Valid (RX)", DcVoltageValid)
             @Check("DC Current Valid (RX)", DcCurrentValid)
 
-            @Check("Power Enable (TX)",
-                        Reader.ControlCmd?.PowerEnable == true)
             @Check("State = Standby", HasStatusRx && Reader.Model!.Status!.State == ChargerState.Standby)
-            @Check("Wireless OK",HasWirelessRx && Reader.Model!.WirelessStatusReport!.WirelessOk == true)
+            @Check("Wireless OK", HasWirelessRx && Reader.Model!.WirelessStatusReport!.WirelessOk == true)
             @Check("Gap ≤ 12 mm",
                         Reader.Model?.Wireless?.Gap_mm != null &&
                         Reader.Model!.Wireless!.Gap_mm <= 12)
-            @Check("AC Present",HasAcRx)
-            @Check("No Fault",HasStatusRx && Reader.Model!.Fault == false)
-            @Check("No CAN Watchdog",HasStatusRx && Reader.Model!.Status!.Watchdog == false)
-            @Check("No UnderCurrent",HasWirelessRx && Reader.Model!.WirelessStatusReport!.UnderCurrent == false)
+            @Check("AC Present", HasAcRx)
+            @Check("No Fault", HasStatusRx && Reader.Model!.Fault == false)
+            @Check("No CAN Watchdog", HasStatusRx && Reader.Model!.Status!.Watchdog == false)
+            @Check("No UnderCurrent", HasWirelessRx && Reader.Model!.WirelessStatusReport!.UnderCurrent == false)
         </div>
 
 
@@ -246,8 +255,8 @@
 
             <div class="row">
                 <span>Power Enable</span>
-                <div class="@(Reader.ControlCmd?.PowerEnable == true ? "on" : "off")">
-                    @(Reader.ControlCmd?.PowerEnable == true ? "ON" : "OFF")
+                <div class="@(TxPowerRequested ? "on" : "off")">
+                    @(TxPowerRequested ? "ON" : "OFF")
                 </div>
             </div>
         </div>
@@ -263,12 +272,16 @@
     bool HasDcRx => Reader.Model?.Voltage_V != null && Reader.Model?.Current_A != null;
     const double DcVoltageMin = 5.0;   // <5V coi như chưa đóng công suất
     const double DcCurrentMin = 0.3;   // <0.3A coi như chưa có tải
+    bool TxAlive => Reader.IsTx191Alive(TimeSpan.FromMilliseconds(300));
+    bool TxPowerRequested =>
+        Reader.IsPowerRequested(TimeSpan.FromMilliseconds(300));
+    bool IsPowerOn => TxPowerRequested;
 
     bool DcVoltageValid =>
         HasDcRx &&
         Reader.ControlCmd?.DemandVoltage_V > 0 &&
-        Reader.Model!.Voltage_V >= DcVoltageMin &&
-        Reader.Model!.Voltage_V < Reader.ControlCmd!.DemandVoltage_V;
+        Reader.Model!.Voltage_V >= 5.0 &&                 // đã có battery
+        Reader.Model!.Voltage_V <= Reader.ControlCmd!.DemandVoltage_V;
 
     bool DcCurrentValid =>
         HasDcRx &&
@@ -276,18 +289,15 @@
 
     double SetVoltage;
     double SetCurrent;
-    bool PowerEnable;
-
-    DateTime? _lastTx191;
-    bool _txRequestedPowerOn;
 
     bool IsConnected => Can.IsConnected;
     double Power => (Reader.Model?.Voltage_V ?? 0) * (Reader.Model?.Current_A ?? 0);
 
     bool CanPowerOn =>
         IsConnected &&
-        SetCurrent > 0 &&                    // UI input hợp lệ
+        SetCurrent > 0 &&
         SetVoltage > 0 &&
+        Reader.Model?.Status?.State == ChargerState.Standby &&
         Reader.Model?.WirelessStatusReport?.WirelessOk == true &&
         Reader.Model?.Wireless?.Gap_mm <= 12 &&
         Reader.Model?.Ac != null &&
@@ -303,12 +313,12 @@
     async Task PowerOn()
     {
         if (!CanPowerOn) return;
-        _txRequestedPowerOn = true;
-        _lastTx191 = DateTime.UtcNow;
-        PowerEnable = true;
 
+        // Clear fault 1 chu kỳ
         Writer.Update(c => c.ClearFaults = true);
         await Task.Delay(300);
+
+        // Gửi command bật công suất
         Writer.Update(c =>
         {
             c.ClearFaults = false;
@@ -319,11 +329,9 @@
         });
     }
 
+
     void PowerOff()
     {
-        _txRequestedPowerOn = false;
-        _lastTx191 = DateTime.UtcNow;
-        PowerEnable = false;
         Writer.Update(c =>
         {
             c.PowerEnable = false;
@@ -332,51 +340,13 @@
         });
     }
 
+
     async Task ClearFault()
     {
         Writer.Update(c => c.ClearFaults = true);
         await Task.Delay(200);
         Writer.Update(c => c.ClearFaults = false);
     }
-
-    string Tx191Result
-    {
-        get
-        {
-            if (_lastTx191 == null) return "--";
-
-            // Chờ RX phản hồi
-            if ((DateTime.UtcNow - _lastTx191.Value).TotalMilliseconds < 500)
-                return "WAITING RX…";
-
-            var state = Reader.Model?.Status?.State;
-            var current = Reader.Model?.Current_A ?? 0;
-
-            if (_txRequestedPowerOn)
-            {
-                if (state == ChargerState.Charging && current > 0.3)
-                    return "✅ ACCEPTED (Power Flowing)";
-
-                if (state == ChargerState.Charging && current <= 0.3)
-                    return "⚠ CHARGING – NO CURRENT";
-
-                if (state == ChargerState.Standby)
-                    return "❌ REJECTED";
-
-                if (state == ChargerState.Fault)
-                    return "❌ FAULT";
-            }
-
-            return "UNKNOWN";
-        }
-    }
-
-
-    string Tx191ResultClass =>
-        Tx191Result.StartsWith("✅") ? "on" :
-        Tx191Result.StartsWith("⚠") ? "warn" :
-        Tx191Result.StartsWith("❌") ? "fault" :
-        "off";
 
 
     RenderFragment Bool(string t, bool v) => @<div class="chk @(v ? "on" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
