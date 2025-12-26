@@ -5,12 +5,12 @@ import threading
 # ============================================================
 # CONFIG
 # ============================================================
-CAN_IFACE = "can0"          # hoặc vcan0 nếu mô phỏng
-TX_PERIOD = 0.1             # 100 ms
-WATCHDOG_TIMEOUT = 0.3      # 300 ms
+CAN_IFACE = "can0"
+TX_PERIOD = 0.1
+WATCHDOG_TIMEOUT = 0.3
 
 # ============================================================
-# STATE – CHARGER MODEL
+# STATE – CHARGER MODEL (GIỮ LOGIC CŨ)
 # ============================================================
 state = {
     # battery / output
@@ -21,8 +21,10 @@ state = {
     # command từ 0x191
     "demand_v": 0.0,
     "demand_i": 0.0,
-    "power_enable": False,
-    "power_stage1": False,
+
+    # ⚠️ LOGIC FLAG (KHÔNG PHẢI BIT CAN)
+    "power_enable": False,     # alias logic
+    "power_stage1": False,     # bit CAN thật
 
     # wireless
     "gap_mm": 8,
@@ -40,14 +42,10 @@ state = {
 # ============================================================
 # CAN BUS
 # ============================================================
-try:
-    bus = can.interface.Bus(channel=CAN_IFACE, interface="socketcan")
-except OSError as e:
-    print(f"❌ CAN interface {CAN_IFACE} not available: {e}")
-    exit(1)
+bus = can.interface.Bus(channel=CAN_IFACE, interface="socketcan")
 
 # ============================================================
-# BIT HELPERS
+# BIT HELPERS (LSB-first)
 # ============================================================
 def get_bits(buf, start, length):
     v = 0
@@ -66,36 +64,36 @@ def set_bits(buf, start, length, value):
             buf[bit // 8] &= ~(1 << (bit % 8))
 
 # ============================================================
-# RX LOOP – CONTROL MODULE 0x191
+# RX LOOP – CONTROL MODULE 0x191 (FIX BIT)
 # ============================================================
 def rx_loop():
     while True:
-        try:
-            msg = bus.recv(timeout=1.0)
-        except can.CanOperationError:
+        msg = bus.recv()
+        if msg.arbitration_id != 0x191:
             continue
 
-        if msg is None:
-            continue
+        d = msg.data
 
-        if msg.arbitration_id == 0x191:
-            d = msg.data
+        state["has_seen_191"] = True
+        state["last_191_time"] = time.time()
 
-            state["has_seen_191"] = True
-            state["last_191_time"] = time.time()
+        # ---- decode ĐÚNG TÀI LIỆU ----
+        state["demand_v"] = get_bits(d, 0, 20) * 0.001
+        state["power_stage1"] = get_bits(d, 20, 1) == 1     # ✅ BIT ĐÚNG
+        state["demand_i"] = get_bits(d, 32, 18) * 0.001
 
-            state["demand_v"] = get_bits(d, 0, 20) * 0.001
-            state["power_enable"] = get_bits(d, 20, 1) == 1
-            state["power_stage1"] = get_bits(d, 22, 1) == 1
-            state["demand_i"] = get_bits(d, 32, 18) * 0.001
+        # ---- GIỮ LOGIC CŨ ----
+        # power_enable không tồn tại trong CAN
+        # → ánh xạ logic
+        state["power_enable"] = state["power_stage1"]
 
-            print(
-                f"[RX 0x191] "
-                f"V={state['demand_v']:.1f}V "
-                f"I={state['demand_i']:.1f}A "
-                f"EN={state['power_enable']} "
-                f"ST1={state['power_stage1']}"
-            )
+        print(
+            f"[RX 0x191] "
+            f"V={state['demand_v']:.1f}V "
+            f"I={state['demand_i']:.1f}A "
+            f"EN={state['power_enable']} "
+            f"ST1={state['power_stage1']}"
+        )
 
 # ============================================================
 # SAFE SEND
@@ -124,16 +122,15 @@ def tx_321():
     d = bytearray(8)
 
     if state["fault_watchdog"]:
-        charger_state = 0x10  # Fault
+        charger_state = 0x10
     elif state["charging"]:
-        charger_state = 0x04  # Charging
+        charger_state = 0x04
     else:
-        charger_state = 0x01  # Standby
+        charger_state = 0x01
 
     set_bits(d, 0, 6, charger_state)
     set_bits(d, 12, 1, int(state["fault_watchdog"]))
     set_bits(d, 24, 1, int(state["fault_watchdog"]))
-
     send(0x321, d)
 
 def tx_3c1():
@@ -162,20 +159,20 @@ def tx_5f1():
     send(0x5F1, d)
 
 # ============================================================
-# MAIN LOOP – CHARGER LOGIC
+# MAIN LOOP – CHARGER LOGIC (GIỮ NGUYÊN)
 # ============================================================
 def tx_loop():
     while True:
         now = time.time()
 
-        # ---------- ACTIVE REQUEST ----------
+        # ---------- ACTIVE REQUEST (LOGIC CŨ) ----------
         active_request = (
             state["power_enable"]
             and state["power_stage1"]
             and state["demand_i"] > 0
         )
 
-        # ---------- WATCHDOG (FIXED) ----------
+        # ---------- WATCHDOG ----------
         if state["has_seen_191"] and active_request:
             state["fault_watchdog"] = (
                 now - state["last_191_time"] > WATCHDOG_TIMEOUT
@@ -197,7 +194,6 @@ def tx_loop():
         if allow_charge:
             state["charging"] = True
 
-            # CC → CV
             if state["output_voltage"] < state["demand_v"]:
                 state["output_current"] = min(state["demand_i"], 10.0)
                 state["output_voltage"] += 0.02
@@ -222,7 +218,7 @@ def tx_loop():
 # ============================================================
 # START
 # ============================================================
-print("🚀 Wireless Charger CAN Simulator (WATCHDOG LOGIC FIXED)")
+print("🚀 Wireless Charger CAN Simulator (FIXED BIT, OLD LOGIC KEPT)")
 
 threading.Thread(target=rx_loop, daemon=True).start()
 tx_loop()

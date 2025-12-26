@@ -17,28 +17,21 @@ public sealed class CanSocketWriterService : IDisposable
     private enum TxState
     {
         Idle,       // chưa gửi gì
-        Active,     // gửi 0x191 định kỳ
-        Stopping    // gửi 1 frame OFF cuối
+        Active,     // gửi 0x191 định kỳ (có thể ON hoặc OFF tùy _cmd)
+        Stopping    // đang trong giai đoạn gửi frame OFF cuối trước khi dừng
     }
 
     public CanSocketWriterService(SocketCan can)
     {
         _can = can;
 
-        // KHÔNG auto start – chỉ chạy khi StartTx()
-        _timer = new Timer(_ => OnTick(),
-            null,
-            Timeout.Infinite,
-            Timeout.Infinite);
+        _timer = new Timer(_ => OnTick(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     /* ============================================================
      * PUBLIC API
      * ============================================================ */
 
-    /// <summary>
-    /// Update nội dung ControlModuleCommand (thread-safe)
-    /// </summary>
     public void Update(Action<ControlModuleCommand> update)
     {
         lock (_lock)
@@ -48,25 +41,22 @@ public sealed class CanSocketWriterService : IDisposable
     }
 
     /// <summary>
-    /// ▶️ Bắt đầu gửi 0x191 định kỳ (100 ms – watchdog)
+    /// Bắt đầu gửi định kỳ 100ms
     /// </summary>
     public void StartTx()
     {
-        if (!_can.IsConnected)
-            return;
+        if (!_can.IsConnected) return;
 
         lock (_lock)
         {
             _state = TxState.Active;
         }
 
-        // tick ngay + 100ms
         _timer.Change(0, 100);
     }
 
     /// <summary>
-    /// ⛔ Dừng TX – gửi 1 frame OFF CUỐI
-    /// (rất quan trọng để tránh sạc treo)
+    /// Dừng gửi – sẽ tự động gửi vài frame OFF trước khi dừng hẳn
     /// </summary>
     public void StopTx()
     {
@@ -99,13 +89,15 @@ public sealed class CanSocketWriterService : IDisposable
 
             case TxState.Active:
                 SendCurrentCommand();
-                return;
+                break;
 
             case TxState.Stopping:
-                SendOffCommand();
+                SendCurrentCommand(); // vẫn dùng hàm chung – lúc này _cmd đã là OFF
+                // Sau ~500ms (5 frame) tự động dừng
+                // Bạn có thể điều chỉnh thời gian nếu cần
+                _timer.Change(500, Timeout.Infinite); // dừng sau 500ms
                 _state = TxState.Idle;
-                _timer.Change(Timeout.Infinite, Timeout.Infinite);
-                return;
+                break;
         }
     }
 
@@ -114,8 +106,7 @@ public sealed class CanSocketWriterService : IDisposable
      * ============================================================ */
 
     /// <summary>
-    /// Gửi frame ControlModule (0x191)
-    /// – đúng Demand_PowerStage1 + watchdog
+    /// Gửi frame hiện tại – dùng chung cho cả ON và OFF
     /// </summary>
     private void SendCurrentCommand()
     {
@@ -126,39 +117,20 @@ public sealed class CanSocketWriterService : IDisposable
             snapshot = Clone(_cmd);
         }
 
-        // Guard an toàn
-        if (snapshot.Demand_Voltage <= 0 ||
-            snapshot.Demand_Current <= 0)
-            return;
-
-        // ❗ BẮT BUỘC bật Stage1
-        snapshot.Demand_PowerStage1 = true;
-
-        _can.Send(0x191, ControlModuleEncoder.Encode(snapshot));
-    }
-
-    /// <summary>
-    /// Gửi 1 frame OFF CUỐI
-    /// – Stage1 = 0
-    /// – Current = 0
-    /// </summary>
-    private void SendOffCommand()
-    {
-        ControlModuleCommand off;
-
-        lock (_lock)
+        // Không gửi nếu không có nhu cầu công suất (tránh spam frame rác)
+        // Nhưng nếu đang tắt (Current = 0, Stage1 = false) thì VẪN PHẢI gửi để charger nhận lệnh tắt
+        if (snapshot.Demand_Voltage <= 0 && snapshot.Demand_Current <= 0 && !snapshot.Demand_PowerStage1)
         {
-            off = new ControlModuleCommand
-            {
-                Demand_Voltage = _cmd.Demand_Voltage,
-                Demand_Current = 0,
-
-                Demand_PowerStage1 = false,
-                Demand_ClearFaults = false
-            };
+            // Đây là frame OFF → vẫn gửi để đảm bảo tắt chắc chắn
+        }
+        else if (snapshot.Demand_Voltage <= 0 || snapshot.Demand_Current <= 0)
+        {
+            // Không có nhu cầu công suất và không phải frame tắt → không gửi
+            return;
         }
 
-        _can.Send(0x191, ControlModuleEncoder.Encode(off));
+        // ➜ Không ép buộc PowerStage1 = true nữa → giữ nguyên giá trị người dùng set
+        _can.Send(0x191, ControlModuleEncoder.Encode(snapshot));
     }
 
     private static ControlModuleCommand Clone(ControlModuleCommand c)
@@ -171,9 +143,7 @@ public sealed class CanSocketWriterService : IDisposable
             Demand_ClearFaults = c.Demand_ClearFaults
         };
 
-        for (int i = 0; i < copy.Demand_PowerStages.Length; i++)
-            copy.Demand_PowerStages[i] = c.Demand_PowerStages[i];
-
+        Array.Copy(c.Demand_PowerStages, copy.Demand_PowerStages, c.Demand_PowerStages.Length);
         return copy;
     }
 

@@ -313,17 +313,16 @@
     {
         if (!CanPowerOn) return;
 
-        Writer.Update(c => c.ClearFaults = true);
+        Writer.Update(c => c.Demand_ClearFaults = true);
         await Task.Delay(300);
 
         Writer.Update(c =>
         {
-            c.ClearFaults = false;
-            c.DemandVoltage_V = SetVoltage;
-            c.DemandCurrent_A = SetCurrent;
+            c.Demand_ClearFaults = false;
+            c.Demand_Voltage = SetVoltage;
+            c.Demand_Current = SetCurrent;
 
-            c.PowerEnable = true;   // 🔴 THIẾU
-            c.PowerStage1 = true;   // 🟢 OK
+            c.Demand_PowerStage1 = true;   // 🟢 OK
         });
 
         Writer.StartTx();
@@ -334,9 +333,8 @@
     {
         Writer.Update(c =>
         {
-            c.PowerEnable = false;  // 🔴 TẮT MASTER
-            c.PowerStage1 = false;  // 🟢 TẮT STAGE
-            c.DemandCurrent_A = 0;
+            c.Demand_PowerStage1 = false;  // 🟢 TẮT STAGE
+            c.Demand_Current = 0;
         });
 
         Writer.StopTx();   // ⛔ GỬI OFF FRAME CUỐI
@@ -344,11 +342,38 @@
 
     async Task ClearFault()
     {
-        Writer.Update(c => c.ClearFaults = true);
-        await Task.Delay(200);
-        Writer.Update(c => c.ClearFaults = false);
-    }
+        if (!IsConnected)
+            return;
 
+        // ===============================
+        // 1️⃣ PULSE ON: ClearFaults = 1
+        // ===============================
+        var clearOn = new ControlModuleCommand
+        {
+            Demand_Voltage = SetVoltage,   // không bắt buộc, nhưng OK
+            Demand_Current = 0,
+            Demand_PowerStage1 = false,
+            Demand_ClearFaults = true
+        };
+
+        Can.Send(0x191, ControlModuleEncoder.Encode(clearOn));
+
+        // ⏱ cho charger bắt cạnh
+        await Task.Delay(120);
+
+        // ===============================
+        // 2️⃣ PULSE OFF: ClearFaults = 0
+        // ===============================
+        var clearOff = new ControlModuleCommand
+        {
+            Demand_Voltage = SetVoltage,
+            Demand_Current = 0,
+            Demand_PowerStage1 = false,
+            Demand_ClearFaults = false
+        };
+
+        Can.Send(0x191, ControlModuleEncoder.Encode(clearOff));
+    }
 
     RenderFragment Bool(string t, bool v) => @<div class="chk @(v ? "on" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
     RenderFragment Fault(string t, bool v) => @<div class="chk @(v ? "fault" : "off")"><input type="checkbox" checked="@v" disabled /><span>@t</span></div>;
