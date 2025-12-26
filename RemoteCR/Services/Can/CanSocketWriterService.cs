@@ -17,16 +17,17 @@ public sealed class CanSocketWriterService : IDisposable
     private enum TxState
     {
         Idle,       // chưa gửi gì
-        Active,     // gửi đều 0x191
-        Stopping    // gửi OFF frame cuối
+        Active,     // gửi 0x191 định kỳ
+        Stopping    // gửi 1 frame OFF cuối
     }
 
     public CanSocketWriterService(SocketCan can)
     {
         _can = can;
 
-        // Timer 100 ms theo CAN spec
-        _timer = new Timer(_ => OnTick(), null,
+        // KHÔNG auto start – chỉ chạy khi StartTx()
+        _timer = new Timer(_ => OnTick(),
+            null,
             Timeout.Infinite,
             Timeout.Infinite);
     }
@@ -36,7 +37,7 @@ public sealed class CanSocketWriterService : IDisposable
      * ============================================================ */
 
     /// <summary>
-    /// Update nội dung frame 0x191 (thread-safe)
+    /// Update nội dung ControlModuleCommand (thread-safe)
     /// </summary>
     public void Update(Action<ControlModuleCommand> update)
     {
@@ -47,7 +48,7 @@ public sealed class CanSocketWriterService : IDisposable
     }
 
     /// <summary>
-    /// ▶️ Bắt đầu gửi 0x191 định kỳ (100 ms)
+    /// ▶️ Bắt đầu gửi 0x191 định kỳ (100 ms – watchdog)
     /// </summary>
     public void StartTx()
     {
@@ -59,11 +60,13 @@ public sealed class CanSocketWriterService : IDisposable
             _state = TxState.Active;
         }
 
+        // tick ngay + 100ms
         _timer.Change(0, 100);
     }
 
     /// <summary>
-    /// ⛔ Dừng TX – gửi 1 frame OFF CUỐI (rất quan trọng)
+    /// ⛔ Dừng TX – gửi 1 frame OFF CUỐI
+    /// (rất quan trọng để tránh sạc treo)
     /// </summary>
     public void StopTx()
     {
@@ -111,8 +114,8 @@ public sealed class CanSocketWriterService : IDisposable
      * ============================================================ */
 
     /// <summary>
-    /// Gửi frame 0x191 hiện tại
-    /// (đã encode đúng bit 20 + 22)
+    /// Gửi frame ControlModule (0x191)
+    /// – đúng Demand_PowerStage1 + watchdog
     /// </summary>
     private void SendCurrentCommand()
     {
@@ -123,19 +126,21 @@ public sealed class CanSocketWriterService : IDisposable
             snapshot = Clone(_cmd);
         }
 
-        // Guard: không gửi frame rỗng
-        if (snapshot.DemandVoltage_V <= 0 ||
-            snapshot.DemandCurrent_A <= 0)
+        // Guard an toàn
+        if (snapshot.Demand_Voltage <= 0 ||
+            snapshot.Demand_Current <= 0)
             return;
 
+        // ❗ BẮT BUỘC bật Stage1
+        snapshot.Demand_PowerStage1 = true;
+
         _can.Send(0x191, ControlModuleEncoder.Encode(snapshot));
-        // canid data 191
-        Console.WriteLine($"Sent CAN ID 0x191: V={snapshot.DemandVoltage_V}, I={snapshot.DemandCurrent_A}, PE={snapshot.PowerEnable}, PS1={snapshot.PowerStage1}, CF={snapshot.ClearFaults}");
     }
 
     /// <summary>
-    /// Gửi 1 frame OFF cuối cùng
-    /// → tránh watchdog / sạc treo
+    /// Gửi 1 frame OFF CUỐI
+    /// – Stage1 = 0
+    /// – Current = 0
     /// </summary>
     private void SendOffCommand()
     {
@@ -145,12 +150,11 @@ public sealed class CanSocketWriterService : IDisposable
         {
             off = new ControlModuleCommand
             {
-                DemandVoltage_V = _cmd.DemandVoltage_V,
-                DemandCurrent_A = 0,
+                Demand_Voltage = _cmd.Demand_Voltage,
+                Demand_Current = 0,
 
-                PowerEnable = false,   // 🔴 MASTER OFF
-                PowerStage1 = false,   // 🟢 STAGE OFF
-                ClearFaults = false
+                Demand_PowerStage1 = false,
+                Demand_ClearFaults = false
             };
         }
 
@@ -159,14 +163,18 @@ public sealed class CanSocketWriterService : IDisposable
 
     private static ControlModuleCommand Clone(ControlModuleCommand c)
     {
-        return new ControlModuleCommand
+        var copy = new ControlModuleCommand
         {
-            DemandVoltage_V = c.DemandVoltage_V,
-            DemandCurrent_A = c.DemandCurrent_A,
-            PowerEnable = c.PowerEnable,
-            PowerStage1 = c.PowerStage1,
-            ClearFaults = c.ClearFaults
+            Demand_Voltage = c.Demand_Voltage,
+            Demand_Current = c.Demand_Current,
+            Demand_PowerStage1 = c.Demand_PowerStage1,
+            Demand_ClearFaults = c.Demand_ClearFaults
         };
+
+        for (int i = 0; i < copy.Demand_PowerStages.Length; i++)
+            copy.Demand_PowerStages[i] = c.Demand_PowerStages[i];
+
+        return copy;
     }
 
     public void Dispose()

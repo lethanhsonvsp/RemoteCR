@@ -2,14 +2,19 @@
 
 public class ControlModuleCommand
 {
-    public double DemandVoltage_V;
-    public double DemandCurrent_A;
+    // Demand_Voltage (bit 0..19, 0.001 V)
+    public double Demand_Voltage;
 
-    // 🔴 MASTER ENABLE (BIT 20)
-    public bool PowerEnable;
+    // Demand_Current (bit 32..49, 0.001 A)
+    public double Demand_Current;
 
-    // 🟢 POWER STAGE 1 (BIT 22)
-    public bool PowerStage1;
+    // Demand_PowerStage1 (bit 20)
+    public bool Demand_PowerStage1;
 
-    public bool ClearFaults;
+    // Demand_ClearFaults (bit 21)
+    public bool Demand_ClearFaults;
+
+    // Demand_PowerStage2~10 (bit 22..30)
+    // standalone → chỉ dùng [0]
+    public bool[] Demand_PowerStages { get; } = new bool[9];
 }
